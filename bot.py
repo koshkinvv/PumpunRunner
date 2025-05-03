@@ -42,12 +42,82 @@ async def help_command(update, context):
         "*Доступные команды:*\n"
         "/start - Начать или перезапустить процесс создания профиля\n"
         "/plan - Получить персонализированный план тренировок\n"
+        "/pending - Показать только невыполненные тренировки\n"
         "/help - Показать это сообщение помощи\n"
         "/cancel - Отменить текущий разговор\n\n"
         "Во время создания профиля я задам вам вопросы о ваших беговых целях, физических параметрах "
         "и тренировочных привычках. Вы можете отменить процесс в любое время, используя команду /cancel."
     )
     await update.message.reply_text(help_text, parse_mode='Markdown')
+
+async def pending_trainings_command(update, context):
+    """Handler for the /pending command - shows only pending (not completed) trainings."""
+    try:
+        # Get user ID
+        telegram_id = update.effective_user.id
+        db_user_id = DBManager.get_user_id(telegram_id)
+        
+        if not db_user_id:
+            await update.message.reply_text(
+                "❌ Вы еще не создали свой профиль бегуна. Используйте команду /start для создания профиля."
+            )
+            return
+        
+        # Get latest training plan
+        plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+        
+        if not plan:
+            await update.message.reply_text(
+                "❌ У вас еще нет плана тренировок. Используйте команду /plan для создания плана."
+            )
+            return
+        
+        # Get completed trainings
+        plan_id = plan['id']
+        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        
+        # Get only pending trainings (not completed)
+        pending_trainings = []
+        for idx, day in enumerate(plan['plan_data']['training_days']):
+            training_day_num = idx + 1
+            if training_day_num not in completed_days:
+                pending_trainings.append((training_day_num, day))
+        
+        if not pending_trainings:
+            await update.message.reply_text(
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!"
+            )
+            return
+        
+        # Send plan overview
+        await update.message.reply_text(
+            f"📋 *Невыполненные тренировки из плана:*\n\n"
+            f"*{plan['plan_name']}*",
+            parse_mode='Markdown'
+        )
+        
+        # Send each pending training day
+        for training_day_num, day in pending_trainings:
+            day_message = (
+                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                f"Тип: {day['training_type']}\n"
+                f"Дистанция: {day['distance']}\n"
+                f"Темп: {day['pace']}\n\n"
+                f"{day['description']}"
+            )
+            
+            # Create "Выполнено" button for each training day
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+            ])
+            
+            await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+    
+    except Exception as e:
+        logging.error(f"Error showing pending trainings: {e}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при получении невыполненных тренировок. Пожалуйста, попробуйте позже."
+        )
 
 async def generate_plan_command(update, context):
     """Handler for the /plan command."""
@@ -113,13 +183,19 @@ async def generate_plan_command(update, context):
         # Get completed trainings
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
         
-        # Send each training day
+        # Send only not completed training days
+        has_pending_trainings = False
         for idx, day in enumerate(plan['training_days']):
             training_day_num = idx + 1
-            completed_mark = "✅ " if training_day_num in completed_days else ""
+            
+            # Skip completed training days
+            if training_day_num in completed_days:
+                continue
+                
+            has_pending_trainings = True
             
             day_message = (
-                f"{completed_mark}*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"
@@ -132,6 +208,13 @@ async def generate_plan_command(update, context):
             ])
             
             await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
+        # If all trainings are completed, show a congratulation message
+        if not has_pending_trainings:
+            await update.message.reply_text(
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
+                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+            )
     
     except Exception as e:
         logging.error(f"Error generating training plan: {e}")
@@ -147,7 +230,66 @@ async def callback_query_handler(update, context):
     telegram_id = update.effective_user.id
     db_user_id = DBManager.get_user_id(telegram_id)
     
-    if query.data == 'view_plan':
+    # Обработка кнопки выполнения тренировки
+    if query.data.startswith('complete_'):
+        # Формат: complete_PLAN_ID_DAY_NUMBER
+        try:
+            _, plan_id, day_number = query.data.split('_')
+            plan_id = int(plan_id)
+            day_number = int(day_number)
+            
+            # Отмечаем тренировку как выполненную
+            success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, day_number)
+            
+            if success:
+                # Получаем план снова, чтобы увидеть обновленные отметки о выполнении
+                plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+                if not plan:
+                    await query.message.reply_text("❌ Не удалось найти план тренировок.")
+                    return
+                
+                # Получаем день тренировки
+                day_idx = day_number - 1
+                if day_idx < 0 or day_idx >= len(plan['plan_data']['training_days']):
+                    await query.message.reply_text("❌ Неверный номер тренировки.")
+                    return
+                
+                day = plan['plan_data']['training_days'][day_idx]
+                
+                # Получаем все выполненные тренировки
+                completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                
+                # Обновляем сообщение с отметкой о выполнении
+                completed_mark = "✅ " if day_number in completed_days else ""
+                day_message = (
+                    f"{completed_mark}*День {day_number}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {day['training_type']}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                # Кнопка остается, чтобы можно было снова отметить при необходимости
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{day_number}")]
+                ])
+                
+                try:
+                    # Пытаемся обновить сообщение, если это возможно
+                    await query.message.edit_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                except Exception:
+                    # Если не удается обновить, отправляем новое сообщение
+                    await query.message.reply_text(
+                        f"✅ Тренировка на день {day_number} отмечена как выполненная!"
+                    )
+            else:
+                await query.message.reply_text("❌ Не удалось отметить тренировку как выполненную.")
+                
+        except Exception as e:
+            logging.error(f"Error marking training as completed: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
+    
+    elif query.data == 'view_plan':
         # Show existing plan
         plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
         
@@ -162,13 +304,19 @@ async def callback_query_handler(update, context):
         plan_id = plan['id']
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
         
-        # Send each training day
+        # Send only not completed training days
+        has_pending_trainings = False
         for idx, day in enumerate(plan['plan_data']['training_days']):
             training_day_num = idx + 1
-            completed_mark = "✅ " if training_day_num in completed_days else ""
+            
+            # Skip completed training days
+            if training_day_num in completed_days:
+                continue
+                
+            has_pending_trainings = True
             
             day_message = (
-                f"{completed_mark}*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"
@@ -181,6 +329,13 @@ async def callback_query_handler(update, context):
             ])
             
             await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
+        # If all trainings are completed, show a congratulation message
+        if not has_pending_trainings:
+            await query.message.reply_text(
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
+                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+            )
             
     elif query.data == 'new_plan' or query.data == 'generate_plan':
         # Generate new plan
@@ -208,16 +363,41 @@ async def callback_query_handler(update, context):
             parse_mode='Markdown'
         )
         
-        # Send each training day
+        # Get completed trainings
+        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            
+        # Send only not completed training days
+        has_pending_trainings = False
         for idx, day in enumerate(plan['training_days']):
+            training_day_num = idx + 1
+            
+            # Skip completed training days
+            if training_day_num in completed_days:
+                continue
+                
+            has_pending_trainings = True
+            
             day_message = (
-                f"*День {idx+1}: {day['day']} ({day['date']})*\n"
+                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"
                 f"{day['description']}"
             )
-            await query.message.reply_text(day_message, parse_mode='Markdown')
+            
+            # Create "Выполнено" button for each training day
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+            ])
+            
+            await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
+        # If all trainings are completed, show a congratulation message
+        if not has_pending_trainings:
+            await query.message.reply_text(
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
+                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+            )
 
 def setup_bot():
     """Configure and return the bot application."""
@@ -238,6 +418,7 @@ def setup_bot():
     # Add standalone command handlers
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("plan", generate_plan_command))
+    application.add_handler(CommandHandler("pending", pending_trainings_command))
     application.add_handler(CallbackQueryHandler(callback_query_handler))
     
     return application

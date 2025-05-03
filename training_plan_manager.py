@@ -92,8 +92,9 @@ class TrainingPlanManager:
                 plan = cursor.fetchone()
                 if plan:
                     result = dict(plan)
-                    # Parse JSON data
-                    result["plan_data"] = json.loads(result["plan_data"])
+                    # Parse JSON data only if it's still a string
+                    if isinstance(result["plan_data"], str):
+                        result["plan_data"] = json.loads(result["plan_data"])
                     return result
                 return None
                 
@@ -134,8 +135,9 @@ class TrainingPlanManager:
                 results = []
                 for plan in plans:
                     plan_dict = dict(plan)
-                    # Parse JSON data
-                    plan_dict["plan_data"] = json.loads(plan_dict["plan_data"])
+                    # Parse JSON data only if it's still a string
+                    if isinstance(plan_dict["plan_data"], str):
+                        plan_dict["plan_data"] = json.loads(plan_dict["plan_data"])
                     results.append(plan_dict)
                 return results
                 
@@ -175,11 +177,11 @@ class TrainingPlanManager:
                 existing = cursor.fetchone()
                 
                 if existing:
-                    # Already marked, update timestamp
+                    # Already marked, update status and timestamp
                     cursor.execute(
                         """
                         UPDATE completed_trainings 
-                        SET completed_at = CURRENT_TIMESTAMP 
+                        SET status = 'completed', updated_at = CURRENT_TIMESTAMP 
                         WHERE id = %s
                         """,
                         (existing[0],)
@@ -189,9 +191,9 @@ class TrainingPlanManager:
                     cursor.execute(
                         """
                         INSERT INTO completed_trainings (
-                            user_id, plan_id, training_day
+                            user_id, plan_id, training_day, status
                         ) VALUES (
-                            %s, %s, %s
+                            %s, %s, %s, 'completed'
                         )
                         """,
                         (user_id, plan_id, training_day)
@@ -202,6 +204,69 @@ class TrainingPlanManager:
                 
         except Exception as e:
             logging.error(f"Error marking training as completed: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def mark_training_canceled(user_id, plan_id, training_day):
+        """
+        Mark a training day as canceled.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            training_day: Day number in the training plan (1-based)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                # Check if this training day is already marked
+                cursor.execute(
+                    """
+                    SELECT id FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s AND training_day = %s
+                    """,
+                    (user_id, plan_id, training_day)
+                )
+                
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Already marked, update status and timestamp
+                    cursor.execute(
+                        """
+                        UPDATE completed_trainings 
+                        SET status = 'canceled', updated_at = CURRENT_TIMESTAMP 
+                        WHERE id = %s
+                        """,
+                        (existing[0],)
+                    )
+                else:
+                    # New cancellation
+                    cursor.execute(
+                        """
+                        INSERT INTO completed_trainings (
+                            user_id, plan_id, training_day, status
+                        ) VALUES (
+                            %s, %s, %s, 'canceled'
+                        )
+                        """,
+                        (user_id, plan_id, training_day)
+                    )
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logging.error(f"Error marking training as canceled: {e}")
             if conn:
                 conn.rollback()
             return False
@@ -229,7 +294,7 @@ class TrainingPlanManager:
                     """
                     SELECT training_day 
                     FROM completed_trainings 
-                    WHERE user_id = %s AND plan_id = %s
+                    WHERE user_id = %s AND plan_id = %s AND status = 'completed'
                     ORDER BY training_day
                     """,
                     (user_id, plan_id)
@@ -240,6 +305,78 @@ class TrainingPlanManager:
                 
         except Exception as e:
             logging.error(f"Error getting completed trainings: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def get_canceled_trainings(user_id, plan_id):
+        """
+        Get a list of canceled training days for a plan.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            
+        Returns:
+            List of canceled training day numbers
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT training_day 
+                    FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s AND status = 'canceled'
+                    ORDER BY training_day
+                    """,
+                    (user_id, plan_id)
+                )
+                
+                results = cursor.fetchall()
+                return [row[0] for row in results]
+                
+        except Exception as e:
+            logging.error(f"Error getting canceled trainings: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def get_all_processed_trainings(user_id, plan_id):
+        """
+        Get a list of all processed (completed or canceled) training days for a plan.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            
+        Returns:
+            List of processed training day numbers
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT training_day 
+                    FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s
+                    ORDER BY training_day
+                    """,
+                    (user_id, plan_id)
+                )
+                
+                results = cursor.fetchall()
+                return [row[0] for row in results]
+                
+        except Exception as e:
+            logging.error(f"Error getting processed trainings: {e}")
             return []
         finally:
             if conn:

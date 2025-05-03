@@ -72,8 +72,8 @@ def create_tables():
             user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             plan_id INTEGER REFERENCES training_plans(id) ON DELETE CASCADE,
             training_day INTEGER NOT NULL,
-            completed BOOLEAN DEFAULT TRUE,
-            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            status VARCHAR(20) DEFAULT 'completed',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
         
