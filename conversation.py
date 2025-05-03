@@ -512,6 +512,70 @@ class RunnerProfileConversation:
         context.user_data['profile_data']['weekly_volume'] = volume
         context.user_data['profile_data']['weekly_volume_text'] = volume_text
         
+        # Переходим к вопросу о дате начала тренировок
+        reply_markup = ReplyKeyboardMarkup(
+            [['Не знаю']],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            "Когда вы планируете начать тренировки? Пожалуйста, укажите дату в формате ДД.ММ "
+            "или выберите 'Не знаю', если хотите начать тренировки сразу.",
+            reply_markup=reply_markup
+        )
+        return STATES['TRAINING_START_DATE']
+    
+    async def collect_training_start_date(self, update: Update, context: CallbackContext):
+        """Collect and validate training start date."""
+        text = update.message.text
+        
+        if text == 'Не знаю':
+            # Используем текущую дату
+            from datetime import datetime
+            today = datetime.now().strftime("%d.%m.%Y")
+            context.user_data['profile_data']['training_start_date'] = today
+            context.user_data['profile_data']['training_start_date_text'] = "Сегодня"
+        else:
+            # Валидация формата даты
+            date_pattern = r'^(\d{1,2})\.(\d{1,2})$'
+            match = re.match(date_pattern, text)
+            
+            if not match:
+                await update.message.reply_text(
+                    "Пожалуйста, введите дату в формате ДД.ММ (например, 15.06) или выберите 'Не знаю'.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [['Не знаю']],
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                )
+                return STATES['TRAINING_START_DATE']
+            
+            day, month = map(int, match.groups())
+            current_year = datetime.now().year
+            
+            # Проверка валидности даты
+            try:
+                from datetime import datetime
+                # Добавляем текущий год к дате
+                date_obj = datetime(current_year, month, day)
+                date_str = date_obj.strftime("%d.%m.%Y")
+                
+                context.user_data['profile_data']['training_start_date'] = date_str
+                context.user_data['profile_data']['training_start_date_text'] = text
+            except ValueError:
+                await update.message.reply_text(
+                    "Пожалуйста, введите корректную дату. "
+                    "День должен быть от 1 до 31, месяц - от 1 до 12.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [['Не знаю']],
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                )
+                return STATES['TRAINING_START_DATE']
+        
         # Display summary of collected information
         profile = context.user_data['profile_data']
         summary = (
@@ -523,6 +587,7 @@ class RunnerProfileConversation:
             f"📏 Рост: {profile['height']} см\n"
             f"⚖️ Вес: {profile['weight']} кг\n"
             f"🎯 Цель: {profile['goal']}\n"
+            f"📆 Дата начала тренировок: {profile.get('training_start_date_text', 'Не указана')}\n"
         )
         
         if profile['goal'] == 'Улучшить время':
