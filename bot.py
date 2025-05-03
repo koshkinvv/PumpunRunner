@@ -49,8 +49,6 @@ async def generate_plan_command(update, context):
         
         if existing_plan:
             # Plan already exists, ask if user wants to generate a new one
-            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-            
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("👁️ Посмотреть существующий", callback_data="view_plan")],
                 [InlineKeyboardButton("🔄 Создать новый", callback_data="new_plan")]
@@ -186,7 +184,6 @@ def setup_bot():
     application.add_handler(conversation.get_conversation_handler())
     
     # Add standalone command handlers
-    from telegram.ext import CommandHandler, CallbackQueryHandler
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CallbackQueryHandler(callback_query_handler))
