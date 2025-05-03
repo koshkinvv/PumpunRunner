@@ -6,10 +6,10 @@ packages = ["openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app"]
 
 [workflows]
-runButton = "Project"
+runButton = "Web and Bot"
 
 [[workflows.workflow]]
 name = "Project"
@@ -40,6 +40,19 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python main.py"
+
+[[workflows.workflow]]
+name = "Web and Bot"
+author = 41797496
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "gunicorn --bind 0.0.0.0:5000 app:app"
 
 [[ports]]
 localPort = 5000
