@@ -1,74 +1,47 @@
-# Импорты из python-telegram-bot
-try:
-    from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
-    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-except ImportError:
-    # Для LSP - чтобы избежать ошибок проверки типов
-    class ApplicationBuilder:
-        def __init__(self, token=None): 
-            self.token = token
-        def build(self): 
-            return None
-    
-    class CommandHandler:
-        def __init__(self, command, callback): 
-            self.command = command
-            self.callback = callback
-    
-    class CallbackQueryHandler:
-        def __init__(self, callback): 
-            self.callback = callback
-    
-    class InlineKeyboardMarkup:
-        def __init__(self, inline_keyboard): 
-            self.inline_keyboard = inline_keyboard
-    
-    class InlineKeyboardButton:
-        def __init__(self, text, callback_data=None): 
-            self.text = text
-            self.callback_data = callback_data
+import os
+import json
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
 from config import TELEGRAM_TOKEN, logging
 from models import create_tables
-from conversation import RunnerProfileConversation
 from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
 from openai_service import OpenAIService
+from conversation import RunnerProfileConversation
 
 async def help_command(update, context):
     """Handler for the /help command."""
     help_text = (
-        "🏃‍♂️ *Помощь по Боту Профиля Бегуна* 🏃‍♀️\n\n"
-        "Этот бот поможет вам создать профиль бегуна, ответив на серию вопросов.\n\n"
-        "*Доступные команды:*\n"
-        "/start - Начать или перезапустить процесс создания профиля\n"
-        "/plan - Получить персонализированный план тренировок\n"
-        "/pending - Показать только невыполненные тренировки\n"
-        "/help - Показать это сообщение помощи\n"
-        "/cancel - Отменить текущий разговор\n\n"
-        "Во время создания профиля я задам вам вопросы о ваших беговых целях, физических параметрах "
-        "и тренировочных привычках. Вы можете отменить процесс в любое время, используя команду /cancel."
+        "👋 Привет! Я бот-помощник для бегунов. Вот что я могу:\n\n"
+        "/plan - Создать или просмотреть план тренировок\n"
+        "/pending - Показать только незавершенные тренировки\n"
+        "/help - Показать это сообщение с командами\n\n"
+        "Для начала работы и создания персонализированного плана тренировок, "
+        "используйте команду /plan"
     )
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(help_text)
 
 async def pending_trainings_command(update, context):
     """Handler for the /pending command - shows only pending (not completed) trainings."""
     try:
-        # Get user ID
+        # Get user ID from database
         telegram_id = update.effective_user.id
         db_user_id = DBManager.get_user_id(telegram_id)
         
         if not db_user_id:
+            # User not found, prompt to start a conversation
             await update.message.reply_text(
-                "❌ Вы еще не создали свой профиль бегуна. Используйте команду /start для создания профиля."
+                "⚠️ Чтобы создать план тренировок, сначала нужно создать профиль бегуна. "
+                "Используйте команду /plan и выберите 'Создать новый'."
             )
             return
         
         # Get latest training plan
         plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-        
         if not plan:
             await update.message.reply_text(
-                "❌ У вас еще нет плана тренировок. Используйте команду /plan для создания плана."
+                "❌ У вас еще нет плана тренировок. Используйте команду /plan для его создания."
             )
             return
         
@@ -78,119 +51,17 @@ async def pending_trainings_command(update, context):
         canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
         processed_days = completed_days + canceled_days
         
-        # Get only pending trainings (not completed or canceled)
-        pending_trainings = []
-        for idx, day in enumerate(plan['plan_data']['training_days']):
-            training_day_num = idx + 1
-            if training_day_num not in processed_days:
-                pending_trainings.append((training_day_num, day))
-        
-        if not pending_trainings:
-            await update.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!"
-            )
-            return
-        
         # Send plan overview
         await update.message.reply_text(
-            f"📋 *Невыполненные тренировки из плана:*\n\n"
-            f"*{plan['plan_name']}*",
-            parse_mode='Markdown'
-        )
-        
-        # Send each pending training day
-        for training_day_num, day in pending_trainings:
-            day_message = (
-                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                f"Тип: {day['training_type']}\n"
-                f"Дистанция: {day['distance']}\n"
-                f"Темп: {day['pace']}\n\n"
-                f"{day['description']}"
-            )
-            
-            # Create "Выполнено" and "Отменить" buttons for each training day
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
-                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
-            ])
-            
-            await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
-    
-    except Exception as e:
-        logging.error(f"Error showing pending trainings: {e}")
-        await update.message.reply_text(
-            "❌ Произошла ошибка при получении невыполненных тренировок. Пожалуйста, попробуйте позже."
-        )
-
-async def generate_plan_command(update, context):
-    """Handler for the /plan command."""
-    try:
-        # Get user ID
-        telegram_id = update.effective_user.id
-        db_user_id = DBManager.get_user_id(telegram_id)
-        
-        if not db_user_id:
-            await update.message.reply_text(
-                "❌ Вы еще не создали свой профиль бегуна. Используйте команду /start для создания профиля."
-            )
-            return
-        
-        # Get runner profile
-        profile = DBManager.get_runner_profile(db_user_id)
-        
-        if not profile:
-            await update.message.reply_text(
-                "❌ Профиль бегуна не найден. Используйте команду /start для создания профиля."
-            )
-            return
-        
-        # Check if plan already exists
-        existing_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-        
-        if existing_plan:
-            # Plan already exists, ask if user wants to generate a new one
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("👁️ Посмотреть существующий", callback_data="view_plan")],
-                [InlineKeyboardButton("🔄 Создать новый", callback_data="new_plan")]
-            ])
-            
-            await update.message.reply_text(
-                f"У вас уже есть тренировочный план '{existing_plan['plan_name']}'. "
-                f"Хотите посмотреть существующий план или создать новый?",
-                reply_markup=keyboard
-            )
-            return
-        
-        # Otherwise generate a new plan
-        await update.message.reply_text("⏳ Генерирую ваш персонализированный план тренировок. Это может занять некоторое время...")
-        
-        # Generate training plan
-        openai_service = OpenAIService()
-        plan = openai_service.generate_training_plan(profile)
-        
-        # Save plan to database
-        plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
-        
-        if not plan_id:
-            await update.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
-            return
-        
-        # Send plan overview
-        await update.message.reply_text(
-            f"✅ Ваш персонализированный план тренировок готов!\n\n"
+            f"✅ Ваш персонализированный план тренировок:\n\n"
             f"*{plan['plan_name']}*\n\n"
             f"{plan['plan_description']}",
             parse_mode='Markdown'
         )
         
-        # Get completed and canceled trainings
-        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
-        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
-        processed_days = completed_days + canceled_days
-        
-        # Send only not completed training days
+        # Send only not completed or canceled training days
         has_pending_trainings = False
-        for idx, day in enumerate(plan['training_days']):
+        for idx, day in enumerate(plan['plan_data']['training_days']):
             training_day_num = idx + 1
             
             # Skip completed and canceled training days
@@ -235,6 +106,96 @@ async def generate_plan_command(update, context):
                 reply_markup=keyboard
             )
     
+    except Exception as e:
+        logging.error(f"Error generating training plan: {e}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
+        )
+
+async def generate_plan_command(update, context):
+    """Handler for the /plan command."""
+    try:
+        # Get user ID from database
+        telegram_id = update.effective_user.id
+        username = update.effective_user.username
+        first_name = update.effective_user.first_name
+        last_name = update.effective_user.last_name
+        
+        # Try to add/update user and get the ID
+        db_user_id = DBManager.add_user(telegram_id, username, first_name, last_name)
+        
+        if not db_user_id:
+            await update.message.reply_text("❌ Произошла ошибка при регистрации пользователя.")
+            return
+        
+        # Check if user has a runner profile
+        profile = DBManager.get_runner_profile(db_user_id)
+        
+        if not profile:
+            # User doesn't have a profile yet, suggest to create one
+            await update.message.reply_text(
+                "⚠️ У вас еще нет профиля бегуна. Давайте создадим его!\n\n"
+                "Для начала сбора данных, введите /plan"
+            )
+            return
+        
+        # Check if user already has a training plan
+        plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+        
+        if plan:
+            # User already has a plan, ask if they want to view it or create a new one
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("👁️ Посмотреть текущий план", callback_data="view_plan")],
+                [InlineKeyboardButton("🆕 Создать новый план", callback_data="new_plan")]
+            ])
+            
+            await update.message.reply_text(
+                "У вас уже есть план тренировок. Что вы хотите сделать?",
+                reply_markup=keyboard
+            )
+            return
+        
+        # Generate new training plan
+        await update.message.reply_text("⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...")
+        
+        # Get OpenAI service and generate plan
+        openai_service = OpenAIService()
+        plan = openai_service.generate_training_plan(profile)
+        
+        # Save the plan to database
+        plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+        
+        if not plan_id:
+            await update.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+            return
+        
+        # Send plan overview
+        await update.message.reply_text(
+            f"✅ Ваш персонализированный план тренировок готов!\n\n"
+            f"*{plan['plan_name']}*\n\n"
+            f"{plan['plan_description']}",
+            parse_mode='Markdown'
+        )
+        
+        # Send each training day with action buttons
+        for idx, day in enumerate(plan['training_days']):
+            training_day_num = idx + 1
+            day_message = (
+                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                f"Тип: {day['training_type']}\n"
+                f"Дистанция: {day['distance']}\n"
+                f"Темп: {day['pace']}\n\n"
+                f"{day['description']}"
+            )
+            
+            # Create "Выполнено" and "Отменить" buttons for each training day
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
+            ])
+            
+            await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
     except Exception as e:
         logging.error(f"Error generating training plan: {e}")
         await update.message.reply_text(
@@ -393,11 +354,24 @@ async def callback_query_handler(update, context):
             
             await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
-        # If all trainings are completed or canceled, show a congratulation message
+        # If all trainings are completed or canceled, show a congratulation message with continue button
         if not has_pending_trainings:
+            # Calculate total completed distance
+            total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+            
+            # Add total distance to user profile
+            new_volume = DBManager.update_weekly_volume(db_user_id, total_distance)
+            
+            # Create continue button
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+            ])
+            
             await query.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
-                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+                f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {new_volume}.\n\n"
+                f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                reply_markup=keyboard
             )
             
     elif query.data.startswith('continue_plan_'):
@@ -521,11 +495,24 @@ async def callback_query_handler(update, context):
             
             await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
-        # If all trainings are completed or canceled, show a congratulation message
+        # If all trainings are completed or canceled, show a congratulation message with continue button
         if not has_pending_trainings:
+            # Calculate total completed distance
+            total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+            
+            # Add total distance to user profile
+            new_volume = DBManager.update_weekly_volume(db_user_id, total_distance)
+            
+            # Create continue button
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+            ])
+            
             await query.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
-                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+                f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {new_volume}.\n\n"
+                f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                reply_markup=keyboard
             )
 
 def setup_bot():
