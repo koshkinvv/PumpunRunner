@@ -175,20 +175,20 @@ class RunnerProfileConversation:
             height = float(text.replace(',', '.'))
             if height < 100 or height > 250:
                 await update.message.reply_text(
-                    "Please enter a valid height between 100 and 250 cm."
+                    "Пожалуйста, введите корректный рост от 100 до 250 см."
                 )
                 return STATES['HEIGHT']
             
             context.user_data['profile_data']['height'] = height
             
             await update.message.reply_text(
-                "What is your weight in kilograms?"
+                "Какой у вас вес в килограммах?"
             )
             return STATES['WEIGHT']
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter a valid numeric height in centimeters."
+                "Пожалуйста, введите корректное числовое значение роста в сантиметрах."
             )
             return STATES['HEIGHT']
     
@@ -200,7 +200,7 @@ class RunnerProfileConversation:
             weight = float(text.replace(',', '.'))
             if weight < 30 or weight > 250:
                 await update.message.reply_text(
-                    "Please enter a valid weight between 30 and 250 kg."
+                    "Пожалуйста, введите корректный вес от 30 до 250 кг."
                 )
                 return STATES['WEIGHT']
             
@@ -209,25 +209,25 @@ class RunnerProfileConversation:
             # Ask about running experience with keyboard
             reply_markup = ReplyKeyboardMarkup(
                 [
-                    ['Complete beginner'],
-                    ['Less than 1 year'],
-                    ['1-3 years'],
-                    ['3-5 years'],
-                    ['More than 5 years']
+                    ['Полный новичок'],
+                    ['Менее 1 года'],
+                    ['1-3 года'],
+                    ['3-5 лет'],
+                    ['Более 5 лет']
                 ],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             
             await update.message.reply_text(
-                "What is your running experience?",
+                "Каков ваш опыт бега?",
                 reply_markup=reply_markup
             )
             return STATES['EXPERIENCE']
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter a valid numeric weight in kilograms."
+                "Пожалуйста, введите корректное числовое значение веса в килограммах."
             )
             return STATES['WEIGHT']
     
@@ -235,27 +235,27 @@ class RunnerProfileConversation:
         """Collect running experience."""
         text = update.message.text.strip()
         valid_experiences = [
-            'Complete beginner',
-            'Less than 1 year',
-            '1-3 years',
-            '3-5 years',
-            'More than 5 years'
+            'Полный новичок',
+            'Менее 1 года',
+            '1-3 года',
+            '3-5 лет',
+            'Более 5 лет'
         ]
         
         if text not in valid_experiences:
             reply_markup = ReplyKeyboardMarkup(
                 [
-                    ['Complete beginner'],
-                    ['Less than 1 year'],
-                    ['1-3 years'],
-                    ['3-5 years'],
-                    ['More than 5 years']
+                    ['Полный новичок'],
+                    ['Менее 1 года'],
+                    ['1-3 года'],
+                    ['3-5 лет'],
+                    ['Более 5 лет']
                 ],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Please select one of the provided options.",
+                "Пожалуйста, выберите один из предложенных вариантов.",
                 reply_markup=reply_markup
             )
             return STATES['EXPERIENCE']
@@ -264,13 +264,13 @@ class RunnerProfileConversation:
         
         # Ask about running goal
         reply_markup = ReplyKeyboardMarkup(
-            [['Just finish', 'Improve time']],
+            [['Просто финишировать', 'Улучшить время']],
             one_time_keyboard=True,
             resize_keyboard=True
         )
         
         await update.message.reply_text(
-            "What is your goal for this run?",
+            "Какова ваша цель на этом забеге?",
             reply_markup=reply_markup
         )
         return STATES['GOAL']
@@ -279,23 +279,23 @@ class RunnerProfileConversation:
         """Collect runner's goal."""
         text = update.message.text.strip()
         
-        if text not in ['Just finish', 'Improve time']:
+        if text not in ['Просто финишировать', 'Улучшить время']:
             reply_markup = ReplyKeyboardMarkup(
-                [['Just finish', 'Improve time']],
+                [['Просто финишировать', 'Улучшить время']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Please select 'Just finish' or 'Improve time'.",
+                "Пожалуйста, выберите 'Просто финишировать' или 'Улучшить время'.",
                 reply_markup=reply_markup
             )
             return STATES['GOAL']
         
         context.user_data['profile_data']['goal'] = text
         
-        if text == 'Improve time':
+        if text == 'Улучшить время':
             await update.message.reply_text(
-                "What is your target finish time? Please enter in format HH:MM:SS",
+                "Какое у вас целевое время финиша? Пожалуйста, введите в формате ЧЧ:ММ:СС",
                 reply_markup=ReplyKeyboardRemove()
             )
             return STATES['TARGET_TIME']
@@ -306,17 +306,17 @@ class RunnerProfileConversation:
             # Ask about fitness level
             reply_markup = ReplyKeyboardMarkup(
                 [
-                    ['Beginner'],
-                    ['Intermediate'],
-                    ['Advanced'],
-                    ['Elite']
+                    ['Начинающий'],
+                    ['Средний'],
+                    ['Продвинутый'],
+                    ['Элитный']
                 ],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             
             await update.message.reply_text(
-                "How would you rate your physical fitness level?",
+                "Как бы вы оценили уровень своей физической подготовки?",
                 reply_markup=reply_markup
             )
             return STATES['FITNESS']
@@ -331,7 +331,7 @@ class RunnerProfileConversation:
         
         if not match:
             await update.message.reply_text(
-                "Please enter time in format HH:MM or HH:MM:SS (e.g., 01:30:00)"
+                "Пожалуйста, введите время в формате ЧЧ:ММ или ЧЧ:ММ:СС (например, 01:30:00)"
             )
             return STATES['TARGET_TIME']
         
@@ -340,17 +340,17 @@ class RunnerProfileConversation:
         # Ask about fitness level
         reply_markup = ReplyKeyboardMarkup(
             [
-                ['Beginner'],
-                ['Intermediate'],
-                ['Advanced'],
-                ['Elite']
+                ['Начинающий'],
+                ['Средний'],
+                ['Продвинутый'],
+                ['Элитный']
             ],
             one_time_keyboard=True,
             resize_keyboard=True
         )
         
         await update.message.reply_text(
-            "How would you rate your physical fitness level?",
+            "Как бы вы оценили уровень своей физической подготовки?",
             reply_markup=reply_markup
         )
         return STATES['FITNESS']
@@ -358,21 +358,21 @@ class RunnerProfileConversation:
     async def collect_fitness(self, update: Update, context: CallbackContext):
         """Collect fitness level."""
         text = update.message.text.strip()
-        valid_levels = ['Beginner', 'Intermediate', 'Advanced', 'Elite']
+        valid_levels = ['Начинающий', 'Средний', 'Продвинутый', 'Элитный']
         
         if text not in valid_levels:
             reply_markup = ReplyKeyboardMarkup(
                 [
-                    ['Beginner'],
-                    ['Intermediate'],
-                    ['Advanced'],
-                    ['Elite']
+                    ['Начинающий'],
+                    ['Средний'],
+                    ['Продвинутый'],
+                    ['Элитный']
                 ],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Please select one of the provided fitness levels.",
+                "Пожалуйста, выберите один из предложенных уровней физической подготовки.",
                 reply_markup=reply_markup
             )
             return STATES['FITNESS']
@@ -380,7 +380,7 @@ class RunnerProfileConversation:
         context.user_data['profile_data']['fitness_level'] = text
         
         await update.message.reply_text(
-            "What is your current weekly running volume in kilometers?",
+            "Какой у вас текущий еженедельный объем бега в километрах?",
             reply_markup=ReplyKeyboardRemove()
         )
         return STATES['WEEKLY_VOLUME']
@@ -393,7 +393,7 @@ class RunnerProfileConversation:
             volume = float(text.replace(',', '.'))
             if volume < 0 or volume > 500:
                 await update.message.reply_text(
-                    "Please enter a valid weekly volume between 0 and 500 km."
+                    "Пожалуйста, введите корректный еженедельный объем бега от 0 до 500 км."
                 )
                 return STATES['WEEKLY_VOLUME']
             
@@ -402,28 +402,28 @@ class RunnerProfileConversation:
             # Display summary of collected information
             profile = context.user_data['profile_data']
             summary = (
-                "Great! Here's a summary of your runner profile:\n\n"
-                f"🏃 Target distance: {profile['distance']} km\n"
-                f"📅 Competition date: {profile['competition_date']}\n"
-                f"👤 Gender: {profile['gender']}\n"
-                f"🎂 Age: {profile['age']}\n"
-                f"📏 Height: {profile['height']} cm\n"
-                f"⚖️ Weight: {profile['weight']} kg\n"
-                f"⏱️ Running experience: {profile['experience']}\n"
-                f"🎯 Goal: {profile['goal']}\n"
+                "Отлично! Вот сводка вашего профиля бегуна:\n\n"
+                f"🏃 Целевая дистанция: {profile['distance']} км\n"
+                f"📅 Дата соревнования: {profile['competition_date']}\n"
+                f"👤 Пол: {profile['gender']}\n"
+                f"🎂 Возраст: {profile['age']}\n"
+                f"📏 Рост: {profile['height']} см\n"
+                f"⚖️ Вес: {profile['weight']} кг\n"
+                f"⏱️ Опыт бега: {profile['experience']}\n"
+                f"🎯 Цель: {profile['goal']}\n"
             )
             
-            if profile['goal'] == 'Improve time':
-                summary += f"⏱️ Target time: {profile['target_time']}\n"
+            if profile['goal'] == 'Улучшить время':
+                summary += f"⏱️ Целевое время: {profile['target_time']}\n"
                 
             summary += (
-                f"💪 Fitness level: {profile['fitness_level']}\n"
-                f"📊 Weekly volume: {profile['weekly_volume']} km\n\n"
-                "Is this information correct?"
+                f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
+                f"📊 Еженедельный объем: {profile['weekly_volume']} км\n\n"
+                "Эта информация верна?"
             )
             
             reply_markup = ReplyKeyboardMarkup(
-                [['Yes, save my profile', 'No, start over']],
+                [['Да, сохранить мой профиль', 'Нет, начать заново']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
@@ -436,7 +436,7 @@ class RunnerProfileConversation:
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter a valid numeric weekly volume in kilometers."
+                "Пожалуйста, введите корректное числовое значение еженедельного объема бега в километрах."
             )
             return STATES['WEEKLY_VOLUME']
     
@@ -444,43 +444,43 @@ class RunnerProfileConversation:
         """Handle user confirmation of collected data."""
         text = update.message.text.strip()
         
-        if text == 'Yes, save my profile':
+        if text == 'Да, сохранить мой профиль':
             user_id = context.user_data.get('db_user_id')
             profile_data = context.user_data.get('profile_data', {})
             
             # Save profile to database
             if DBManager.save_runner_profile(user_id, profile_data):
                 await update.message.reply_text(
-                    "🎉 Perfect! Your runner profile has been saved successfully. "
-                    "Thank you for providing this information!",
+                    "🎉 Отлично! Ваш профиль бегуна успешно сохранен. "
+                    "Спасибо за предоставленную информацию!",
                     reply_markup=ReplyKeyboardRemove()
                 )
             else:
                 await update.message.reply_text(
-                    "⚠️ There was an error saving your profile. Please try again later.",
+                    "⚠️ Произошла ошибка при сохранении профиля. Пожалуйста, попробуйте позже.",
                     reply_markup=ReplyKeyboardRemove()
                 )
             
             return ConversationHandler.END
             
-        elif text == 'No, start over':
+        elif text == 'Нет, начать заново':
             # Clear user data and restart
             context.user_data['profile_data'] = {}
             
             await update.message.reply_text(
-                "Let's start over. What's your target running distance in kilometers?",
+                "Давайте начнем заново. Какую дистанцию бега вы планируете пробежать (в километрах)?",
                 reply_markup=ReplyKeyboardRemove()
             )
             return STATES['DISTANCE']
             
         else:
             reply_markup = ReplyKeyboardMarkup(
-                [['Yes, save my profile', 'No, start over']],
+                [['Да, сохранить мой профиль', 'Нет, начать заново']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Please select 'Yes, save my profile' or 'No, start over'.",
+                "Пожалуйста, выберите 'Да, сохранить мой профиль' или 'Нет, начать заново'.",
                 reply_markup=reply_markup
             )
             return STATES['CONFIRMATION']
@@ -488,7 +488,7 @@ class RunnerProfileConversation:
     async def cancel(self, update: Update, context: CallbackContext):
         """Cancel the conversation."""
         await update.message.reply_text(
-            "Profile creation canceled. You can start again anytime by sending /start.",
+            "Создание профиля отменено. Вы можете начать снова в любое время, отправив команду /start.",
             reply_markup=ReplyKeyboardRemove()
         )
         return ConversationHandler.END
