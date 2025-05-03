@@ -437,10 +437,10 @@ class RunnerProfileConversation:
         # Добавляем стандартные варианты объемов бега
         reply_markup = ReplyKeyboardMarkup(
             [
-                ['10', '20'],
-                ['30', '40'],
-                ['50', '60'],
-                ['70', '80']
+                ['0-10'],
+                ['10-25'],
+                ['25-50'],
+                ['50+']
             ],
             one_time_keyboard=True,
             resize_keyboard=True
@@ -456,80 +456,98 @@ class RunnerProfileConversation:
         """Collect and validate weekly running volume."""
         text = update.message.text.strip()
         
-        try:
-            volume = float(text.replace(',', '.'))
-            if volume < 0 or volume > 500:
+        # Обработка диапазонов
+        if text == '0-10':
+            volume_text = '0-10'
+            volume = 5  # среднее значение диапазона
+        elif text == '10-25':
+            volume_text = '10-25'
+            volume = 17.5  # среднее значение диапазона
+        elif text == '25-50':
+            volume_text = '25-50'
+            volume = 37.5  # среднее значение диапазона
+        elif text == '50+':
+            volume_text = '50+'
+            volume = 50  # минимальное значение диапазона
+        else:
+            # Попытка преобразовать в число, если введено не из диапазонов
+            try:
+                volume = float(text.replace(',', '.'))
+                volume_text = f"{volume}"
+                
+                if volume < 0 or volume > 500:
+                    # Добавляем кнопки с вариантами объема при ошибке
+                    reply_markup = ReplyKeyboardMarkup(
+                        [
+                            ['0-10'],
+                            ['10-25'],
+                            ['25-50'],
+                            ['50+']
+                        ],
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                    await update.message.reply_text(
+                        "Пожалуйста, введите корректный еженедельный объем бега от 0 до 500 км.",
+                        reply_markup=reply_markup
+                    )
+                    return STATES['WEEKLY_VOLUME']
+            except ValueError:
                 # Добавляем кнопки с вариантами объема при ошибке
                 reply_markup = ReplyKeyboardMarkup(
                     [
-                        ['10', '20'],
-                        ['30', '40'],
-                        ['50', '60'],
-                        ['70', '80']
+                        ['0-10'],
+                        ['10-25'],
+                        ['25-50'],
+                        ['50+']
                     ],
                     one_time_keyboard=True,
                     resize_keyboard=True
                 )
                 await update.message.reply_text(
-                    "Пожалуйста, введите корректный еженедельный объем бега от 0 до 500 км.",
+                    "Пожалуйста, выберите один из предложенных вариантов или введите корректное числовое значение.",
                     reply_markup=reply_markup
                 )
                 return STATES['WEEKLY_VOLUME']
+        
+        # Сохраняем и числовое и текстовое представление
+        context.user_data['profile_data']['weekly_volume'] = volume
+        context.user_data['profile_data']['weekly_volume_text'] = volume_text
+        
+        # Display summary of collected information
+        profile = context.user_data['profile_data']
+        summary = (
+            "Отлично! Вот сводка вашего профиля бегуна:\n\n"
+            f"🏃 Целевая дистанция: {profile['distance']} км\n"
+            f"📅 Дата соревнования: {profile['competition_date']}\n"
+            f"👤 Пол: {profile['gender']}\n"
+            f"🎂 Возраст: {profile['age']}\n"
+            f"📏 Рост: {profile['height']} см\n"
+            f"⚖️ Вес: {profile['weight']} кг\n"
+            f"⏱️ Опыт бега: {profile['experience']}\n"
+            f"🎯 Цель: {profile['goal']}\n"
+        )
+        
+        if profile['goal'] == 'Улучшить время':
+            summary += f"⏱️ Целевое время: {profile['target_time']}\n"
             
-            context.user_data['profile_data']['weekly_volume'] = volume
-            
-            # Display summary of collected information
-            profile = context.user_data['profile_data']
-            summary = (
-                "Отлично! Вот сводка вашего профиля бегуна:\n\n"
-                f"🏃 Целевая дистанция: {profile['distance']} км\n"
-                f"📅 Дата соревнования: {profile['competition_date']}\n"
-                f"👤 Пол: {profile['gender']}\n"
-                f"🎂 Возраст: {profile['age']}\n"
-                f"📏 Рост: {profile['height']} см\n"
-                f"⚖️ Вес: {profile['weight']} кг\n"
-                f"⏱️ Опыт бега: {profile['experience']}\n"
-                f"🎯 Цель: {profile['goal']}\n"
-            )
-            
-            if profile['goal'] == 'Улучшить время':
-                summary += f"⏱️ Целевое время: {profile['target_time']}\n"
-                
-            summary += (
-                f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
-                f"📊 Еженедельный объем: {profile['weekly_volume']} км\n\n"
-                "Эта информация верна?"
-            )
-            
-            reply_markup = ReplyKeyboardMarkup(
-                [['Да, сохранить мой профиль', 'Нет, начать заново']],
-                one_time_keyboard=True,
-                resize_keyboard=True
-            )
-            
-            await update.message.reply_text(
-                summary,
-                reply_markup=reply_markup
-            )
-            return STATES['CONFIRMATION']
-            
-        except ValueError:
-            # Добавляем кнопки с вариантами объема при ошибке
-            reply_markup = ReplyKeyboardMarkup(
-                [
-                    ['10', '20'],
-                    ['30', '40'],
-                    ['50', '60'],
-                    ['70', '80']
-                ],
-                one_time_keyboard=True,
-                resize_keyboard=True
-            )
-            await update.message.reply_text(
-                "Пожалуйста, введите корректное числовое значение еженедельного объема бега в километрах.",
-                reply_markup=reply_markup
-            )
-            return STATES['WEEKLY_VOLUME']
+        summary += (
+            f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
+            f"📊 Еженедельный объем: {profile['weekly_volume_text']} км\n\n"
+            "Эта информация верна?"
+        )
+        
+        reply_markup = ReplyKeyboardMarkup(
+            [['Да, сохранить мой профиль', 'Нет, начать заново']],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            summary,
+            reply_markup=reply_markup
+        )
+        return STATES['CONFIRMATION']
     
     async def confirm_data(self, update: Update, context: CallbackContext):
         """Handle user confirmation of collected data."""
