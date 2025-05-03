@@ -63,13 +63,22 @@ def index():
             
             <p>The bot collects the following information:</p>
             <ul>
-                <li>Running distance</li>
-                <li>Competition date</li>
+                <li>Running distance (with button options for 5, 10, 21, 42 km)</li>
+                <li>Competition date (option to specify "No specific date")</li>
                 <li>Personal information (gender, age, height, weight)</li>
-                <li>Running experience</li>
-                <li>Running goals</li>
+                <li>Running goals (finish or improve time)</li>
                 <li>Fitness level</li>
-                <li>Weekly running volume</li>
+                <li>Weekly running volume (with predefined ranges)</li>
+                <li>Training start date (specific date or "Start today")</li>
+            </ul>
+            
+            <p>After creating a profile, the bot generates a personalized 7-day training plan using AI, with the following details for each workout:</p>
+            <ul>
+                <li>Day of the week with specific date</li>
+                <li>Training type (long run, tempo, intervals, recovery)</li>
+                <li>Distance</li>
+                <li>Target pace</li>
+                <li>Detailed workout description</li>
             </ul>
         </div>
     </body>

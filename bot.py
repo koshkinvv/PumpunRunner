@@ -1,5 +1,32 @@
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+# Импорты из python-telegram-bot
+try:
+    from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+except ImportError:
+    # Для LSP - чтобы избежать ошибок проверки типов
+    class ApplicationBuilder:
+        def __init__(self, token=None): 
+            self.token = token
+        def build(self): 
+            return None
+    
+    class CommandHandler:
+        def __init__(self, command, callback): 
+            self.command = command
+            self.callback = callback
+    
+    class CallbackQueryHandler:
+        def __init__(self, callback): 
+            self.callback = callback
+    
+    class InlineKeyboardMarkup:
+        def __init__(self, inline_keyboard): 
+            self.inline_keyboard = inline_keyboard
+    
+    class InlineKeyboardButton:
+        def __init__(self, text, callback_data=None): 
+            self.text = text
+            self.callback_data = callback_data
 from config import TELEGRAM_TOKEN, logging
 from models import create_tables
 from conversation import RunnerProfileConversation

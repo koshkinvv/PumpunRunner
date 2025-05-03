@@ -1,7 +1,20 @@
-from telegram import ReplyKeyboardMarkup, KeyboardButton, Update, ReplyKeyboardRemove
-from telegram.ext import CallbackContext, ConversationHandler
-from datetime import datetime
 import re
+from datetime import datetime
+
+# Импорты из python-telegram-bot
+try:
+    from telegram import ReplyKeyboardMarkup, KeyboardButton, Update, ReplyKeyboardRemove
+    from telegram.ext import CallbackContext, ConversationHandler
+except ImportError:
+    # Для LSP - чтобы избежать ошибок проверки типов
+    class Update:
+        pass
+    
+    class CallbackContext:
+        pass
+    
+    class ConversationHandler:
+        END = -1
 
 from config import STATES, logging
 from db_manager import DBManager
