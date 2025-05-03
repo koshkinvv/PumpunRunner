@@ -1,8 +1,6 @@
+
 import logging
-import os
-import asyncio
 from bot_modified import setup_bot
-from app import app  # Импортируем объект Flask app из app.py
 
 def main():
     """Main function to start the Telegram bot."""
@@ -18,7 +16,7 @@ def main():
     # Log startup message
     logging.info("Runner profile bot started successfully!")
     
-    # Run the bot until the user sends a signal to stop it (e.g. pressing Ctrl+C)
+    # Run the bot until the user sends a signal to stop it
     application.run_polling()
 
 if __name__ == '__main__':
