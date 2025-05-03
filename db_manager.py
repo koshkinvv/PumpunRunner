@@ -297,6 +297,10 @@ class DBManager:
                     # Если парсинг не удался, используем дополнительные километры
                     new_weekly_volume = f"{additional_km:.1f}"
                 
+                # Важно: убедимся, что new_weekly_volume не None
+                if new_weekly_volume is None or new_weekly_volume == "None":
+                    new_weekly_volume = f"{additional_km:.1f}"
+                
                 # Update weekly volume
                 cursor.execute(
                     """
@@ -310,7 +314,12 @@ class DBManager:
                 
                 result = cursor.fetchone()
                 conn.commit()
-                return result[0] if result else None
+                
+                # Проверяем результат перед возвратом
+                if result and result[0]:
+                    return result[0]
+                else:
+                    return f"{additional_km:.1f}"
                 
         except Exception as e:
             logging.error(f"Error updating weekly volume: {e}")
