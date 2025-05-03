@@ -120,7 +120,7 @@ class DBManager:
                         fitness_level = %(fitness_level)s,
                         weekly_volume = %(weekly_volume)s,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE user_id = %s
+                    WHERE user_id = %(user_id)s
                     """
                     cursor.execute(query, {**profile_data, "user_id": user_id})
                 else:
