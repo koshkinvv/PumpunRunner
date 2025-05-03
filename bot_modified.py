@@ -1,6 +1,8 @@
 import os
 import json
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler
+import io
+from datetime import datetime, timedelta
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import TELEGRAM_TOKEN, logging
@@ -9,6 +11,7 @@ from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
 from openai_service import OpenAIService
 from conversation import RunnerProfileConversation
+from image_analyzer import ImageAnalyzer
 
 
 def format_weekly_volume(volume, default_value="0"):
@@ -803,6 +806,179 @@ async def callback_query_handler(update, context):
             logging.error(f"Error continuing training plan: {e}")
             await query.message.reply_text("❌ Произошла ошибка при создании продолжения плана тренировок.")
             
+async def handle_photo(update, context):
+    """Handler for photo messages to analyze workout screenshots."""
+    try:
+        # Get user information
+        telegram_id = update.effective_user.id
+        username = update.effective_user.username or "Unknown"
+        first_name = update.effective_user.first_name or "Unknown"
+        
+        # Log the photo reception
+        logging.info(f"Received photo from {username} (ID: {telegram_id})")
+        
+        # Check if user exists in database
+        db_user_id = DBManager.get_user_id(telegram_id)
+        if not db_user_id:
+            # User not found, prompt to create a profile
+            await update.message.reply_text(
+                "⚠️ Для анализа тренировки сначала нужно создать профиль бегуна. "
+                "Используйте команду /plan для создания профиля."
+            )
+            return
+        
+        # Check if user has an active training plan
+        plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+        if not plan:
+            await update.message.reply_text(
+                "❌ У вас еще нет плана тренировок. Используйте команду /plan для его создания."
+            )
+            return
+        
+        # Send processing message
+        processing_message = await update.message.reply_text(
+            "🔍 Анализирую ваш скриншот тренировки... Это может занять некоторое время."
+        )
+        
+        # Get photo with best quality
+        photo = update.message.photo[-1]
+        
+        # Download the photo
+        photo_file = await context.bot.get_file(photo.file_id)
+        photo_bytes = await photo_file.download_as_bytearray()
+        
+        # Analyze the screenshot
+        analyzer = ImageAnalyzer()
+        workout_data = analyzer.analyze_workout_screenshot(photo_bytes)
+        
+        # Log the analysis results
+        logging.info(f"Workout data analysis: {workout_data}")
+        
+        # Check if analysis was successful
+        if 'error' in workout_data:
+            await update.message.reply_text(
+                f"❌ Не удалось проанализировать скриншот: {workout_data['error']}\n\n"
+                "Пожалуйста, убедитесь, что скриншот содержит информацию о тренировке и попробуйте снова."
+            )
+            return
+        
+        # Get training plan data
+        plan_id = plan['id']
+        training_days = plan['plan_data']['training_days']
+        
+        # Get processed training days
+        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+        processed_days = completed_days + canceled_days
+        
+        # Find a matching training day
+        matching_day_idx, matching_score = analyzer.find_matching_training(training_days, workout_data)
+        
+        # Extract workout details for display
+        workout_date = workout_data.get("дата", "Неизвестно")
+        workout_distance = workout_data.get("дистанция_км", "Неизвестно")
+        workout_time = workout_data.get("длительность", "Неизвестно")
+        workout_pace = workout_data.get("темп", "Неизвестно")
+        workout_app = workout_data.get("название_приложения", "Неизвестно")
+        
+        # Create acknowledgment message
+        ack_message = (
+            f"✅ Информация о тренировке успешно получена!\n\n"
+            f"Дата: *{workout_date}*\n"
+            f"Дистанция: *{workout_distance} км*\n"
+            f"Время: *{workout_time}*\n"
+            f"Темп: *{workout_pace}*\n"
+            f"Источник: *{workout_app}*\n\n"
+        )
+        
+        # If we found a matching training day
+        if matching_day_idx is not None and matching_score >= 5:
+            # Get the matched training day number (1-based index)
+            matched_day_num = matching_day_idx + 1
+            matched_day = training_days[matching_day_idx]
+            
+            # Check if this training day is already processed
+            if matched_day_num in processed_days:
+                await update.message.reply_text(
+                    f"{ack_message}⚠️ Тренировка за *{matched_day['date']}* уже отмечена как выполненная или отмененная.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            # Mark training as completed
+            success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, matched_day_num)
+            
+            if success:
+                # Update weekly volume in profile (add completed distance)
+                try:
+                    distance_km = float(workout_distance)
+                    DBManager.update_weekly_volume(db_user_id, distance_km)
+                except (ValueError, TypeError):
+                    logging.warning(f"Could not update weekly volume with distance: {workout_distance}")
+                
+                await update.message.reply_text(
+                    f"{ack_message}🎉 Тренировка успешно сопоставлена с планом!\n\n"
+                    f"День {matched_day_num}: {matched_day['day']} ({matched_day['date']})\n"
+                    f"Тип: {matched_day['training_type']}\n"
+                    f"Плановая дистанция: {matched_day['distance']}\n\n"
+                    f"Тренировка отмечена как выполненная! 👍",
+                    parse_mode='Markdown'
+                )
+                
+                # Check if all trainings are now completed
+                all_processed_days = TrainingPlanManager.get_all_processed_trainings(db_user_id, plan_id)
+                if len(all_processed_days) == len(training_days):
+                    # Calculate total completed distance
+                    total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                    
+                    # Create continue button
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+                    ])
+                    
+                    await update.message.reply_text(
+                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                        f"Вы пробежали в общей сложности {total_distance:.1f} км.\n\n"
+                        f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                        reply_markup=keyboard
+                    )
+            else:
+                await update.message.reply_text(
+                    f"{ack_message}❌ Не удалось отметить тренировку как выполненную. Пожалуйста, попробуйте сделать это вручную через /pending.",
+                    parse_mode='Markdown'
+                )
+        else:
+            # No matching training day found
+            # Create inline buttons for all unprocessed training days
+            buttons = []
+            for idx, day in enumerate(training_days):
+                day_num = idx + 1
+                if day_num not in processed_days:
+                    buttons.append([InlineKeyboardButton(
+                        f"День {day_num}: {day['day']} ({day['date']}) - {day['distance']}",
+                        callback_data=f"complete_{plan_id}_{day_num}"
+                    )])
+            
+            # Add a "None of these" button
+            buttons.append([InlineKeyboardButton("❌ Ни один из этих дней", callback_data="none_match")])
+            
+            keyboard = InlineKeyboardMarkup(buttons)
+            
+            await update.message.reply_text(
+                f"{ack_message}❓ Я не смог автоматически сопоставить эту тренировку с вашим планом.\n\n"
+                f"Выберите день тренировки, который соответствует этой активности, или выберите 'Ни один из этих дней', "
+                f"если это была дополнительная тренировка вне плана:",
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
+            
+    except Exception as e:
+        logging.error(f"Error handling photo: {e}")
+        await update.message.reply_text(
+            "❌ Произошла ошибка при анализе фотографии. Пожалуйста, попробуйте позже или отметьте тренировку вручную через /pending."
+        )
+
+
 def setup_bot():
     """Configure and return the bot application."""
     # Create the Application object
@@ -819,6 +995,9 @@ def setup_bot():
     # Add conversation handler for profile creation
     conversation = RunnerProfileConversation()
     application.add_handler(conversation.get_conversation_handler())
+    
+    # Add photo handler for analyzing workout screenshots
+    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
     # Add callback query handler for inline buttons
     application.add_handler(CallbackQueryHandler(callback_query_handler))
