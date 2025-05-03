@@ -546,8 +546,87 @@ async def callback_query_handler(update, context):
     # Обработка кнопки "Подготовить план тренировок"
     elif query.data == "generate_plan":
         try:
-            # Запускаем генерацию плана, как в команде /plan
-            await generate_plan_command(update, context)
+            # Получаем данные пользователя
+            telegram_id = update.effective_user.id
+            username = update.effective_user.username
+            first_name = update.effective_user.first_name
+            last_name = update.effective_user.last_name
+            
+            # Пытаемся добавить/обновить пользователя и получить ID
+            db_user_id = DBManager.add_user(telegram_id, username, first_name, last_name)
+            
+            if not db_user_id:
+                await query.message.reply_text("❌ Произошла ошибка при регистрации пользователя.")
+                return
+            
+            # Проверяем, есть ли у пользователя профиль бегуна
+            profile = DBManager.get_runner_profile(db_user_id)
+            
+            if not profile:
+                # У пользователя нет профиля, предлагаем создать
+                await query.message.reply_text(
+                    "⚠️ У вас еще нет профиля бегуна. Давайте создадим его!\n\n"
+                    "Для начала сбора данных, введите /plan"
+                )
+                return
+            
+            # Получаем последний план пользователя
+            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            
+            if plan:
+                # У пользователя уже есть план, спрашиваем, что он хочет сделать
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👁️ Посмотреть текущий план", callback_data="view_plan")],
+                    [InlineKeyboardButton("🆕 Создать новый план", callback_data="new_plan")]
+                ])
+                
+                await query.message.reply_text(
+                    "У вас уже есть план тренировок. Что вы хотите сделать?",
+                    reply_markup=keyboard
+                )
+                return
+            
+            # Генерируем новый план тренировок
+            await query.message.reply_text("⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...")
+            
+            # Получаем сервис OpenAI и генерируем план
+            openai_service = OpenAIService()
+            plan = openai_service.generate_training_plan(profile)
+            
+            # Сохраняем план в базу данных
+            plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+            
+            if not plan_id:
+                await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+                return
+            
+            # Отправляем общую информацию о плане
+            await query.message.reply_text(
+                f"✅ Ваш персонализированный план тренировок готов!\n\n"
+                f"*{plan['plan_name']}*\n\n"
+                f"{plan['plan_description']}",
+                parse_mode='Markdown'
+            )
+            
+            # Отправляем каждый день тренировки с кнопками действий
+            for idx, day in enumerate(plan['training_days']):
+                training_day_num = idx + 1
+                day_message = (
+                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {day['training_type']}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
+                ])
+                
+                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                
         except Exception as e:
             logging.error(f"Error generating plan from button: {e}")
             await query.message.reply_text("❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже.")
