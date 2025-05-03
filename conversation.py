@@ -261,24 +261,22 @@ class RunnerProfileConversation:
             
             context.user_data['profile_data']['weight'] = weight
             
-            # Ask about running experience with keyboard
+            # Пропускаем вопрос об опыте бега
+            # Устанавливаем значение по умолчанию для совместимости с БД
+            context.user_data['profile_data']['experience'] = 'N/A'
+            
+            # Ask about running goal
             reply_markup = ReplyKeyboardMarkup(
-                [
-                    ['Полный новичок'],
-                    ['Менее 1 года'],
-                    ['1-3 года'],
-                    ['3-5 лет'],
-                    ['Более 5 лет']
-                ],
+                [['Просто финишировать', 'Улучшить время']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             
             await update.message.reply_text(
-                "Каков ваш опыт бега?",
+                "Какова ваша цель на этом забеге?",
                 reply_markup=reply_markup
             )
-            return STATES['EXPERIENCE']
+            return STATES['GOAL']
             
         except ValueError:
             await update.message.reply_text(
@@ -524,7 +522,6 @@ class RunnerProfileConversation:
             f"🎂 Возраст: {profile['age']}\n"
             f"📏 Рост: {profile['height']} см\n"
             f"⚖️ Вес: {profile['weight']} кг\n"
-            f"⏱️ Опыт бега: {profile['experience']}\n"
             f"🎯 Цель: {profile['goal']}\n"
         )
         
@@ -617,7 +614,6 @@ class RunnerProfileConversation:
                 STATES['AGE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_age)],
                 STATES['HEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_height)],
                 STATES['WEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weight)],
-                STATES['EXPERIENCE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_experience)],
                 STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
