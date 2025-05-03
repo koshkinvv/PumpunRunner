@@ -22,13 +22,21 @@ def create_tables():
         )
         """)
         
+        # Drop runner_profiles table if exists (для исправления ошибки с типом данных)
+        try:
+            cursor.execute("DROP TABLE IF EXISTS runner_profiles CASCADE")
+            logging.info("Existing runner_profiles table dropped for schema update")
+        except Exception as e:
+            logging.error(f"Error dropping runner_profiles table: {e}")
+            conn.rollback()
+        
         # Create runner_profiles table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS runner_profiles (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             distance FLOAT,
-            competition_date DATE,
+            competition_date VARCHAR(255),
             gender VARCHAR(10),
             age INTEGER,
             height FLOAT,
@@ -55,6 +63,10 @@ def create_tables():
 
 def format_date(date_str):
     """Convert date string to a database-friendly format."""
+    # Проверка на специальный случай "Нет конкретной даты" или "Нет"
+    if date_str == "Нет конкретной даты" or date_str == "Нет":
+        return date_str
+        
     try:
         date_obj = datetime.strptime(date_str, "%d.%m.%Y")
         return date_obj.strftime("%Y-%m-%d")
