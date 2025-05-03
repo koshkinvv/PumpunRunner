@@ -198,6 +198,23 @@ class DBManager:
                 logging.warning(f"Invalid user_id provided to get_runner_profile: {user_id}")
                 return None
             
+            # Также получим информацию о пользователе для лучшего логирования
+            username = "Unknown"
+            telegram_id = "Unknown"
+            try:
+                conn_user = DBManager.get_connection()
+                with conn_user.cursor() as cursor:
+                    cursor.execute("SELECT username, telegram_id FROM users WHERE id = %s", (user_id,))
+                    user_info = cursor.fetchone()
+                    if user_info:
+                        username = user_info[0] or "Unknown"
+                        telegram_id = user_info[1] or "Unknown"
+                conn_user.close()
+            except Exception as e:
+                logging.warning(f"Failed to get user info for user_id {user_id}: {e}")
+            
+            logging.info(f"Получение профиля для пользователя: {username} (ID: {telegram_id}), db_user_id: {user_id}")
+            
             conn = DBManager.get_connection()
             if not conn:
                 logging.error("Failed to establish database connection in get_runner_profile")
@@ -231,20 +248,20 @@ class DBManager:
                 profile = cursor.fetchone()
                 
                 if profile:
-                    logging.info(f"Found profile for user_id {user_id}")
+                    logging.info(f"Найден профиль для пользователя {username} (ID: {telegram_id}), db_user_id: {user_id}")
                     # Преобразуем профиль в словарь и проверяем наличие важных полей
                     profile_dict = dict(profile)
                     
                     # Логируем для отладки
-                    logging.info(f"Profile data: {profile_dict.keys()}")
+                    logging.info(f"Данные профиля: {profile_dict}")
                     
                     return profile_dict
                 else:
-                    logging.warning(f"No profile found for user_id {user_id}")
+                    logging.warning(f"Профиль бегуна для пользователя {username} (ID: {telegram_id}) не найден")
                     return None
                 
         except Exception as e:
-            logging.error(f"Error getting runner profile: {e}")
+            logging.error(f"Ошибка при получении профиля бегуна: {e}")
             return None
         finally:
             if conn:

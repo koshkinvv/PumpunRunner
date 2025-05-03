@@ -23,13 +23,8 @@ def create_tables():
         )
         """)
         
-        # Drop runner_profiles table if exists (для исправления ошибки с типом данных)
-        try:
-            cursor.execute("DROP TABLE IF EXISTS runner_profiles CASCADE")
-            logging.info("Existing runner_profiles table dropped for schema update")
-        except Exception as e:
-            logging.error(f"Error dropping runner_profiles table: {e}")
-            conn.rollback()
+        # Код для удаления таблицы профилей был убран, так как он приводил к потере данных
+        # Теперь профили сохраняются между перезапусками бота
         
         # Create runner_profiles table
         cursor.execute("""
