@@ -119,6 +119,7 @@ class DBManager:
                         target_time = %(target_time)s,
                         fitness_level = %(fitness_level)s,
                         weekly_volume = %(weekly_volume)s,
+                        training_start_date = %(training_start_date)s,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = %(user_id)s
                     """
@@ -129,11 +130,11 @@ class DBManager:
                     INSERT INTO runner_profiles (
                         user_id, distance, competition_date, gender, age, 
                         height, weight, experience, goal, target_time, 
-                        fitness_level, weekly_volume
+                        fitness_level, weekly_volume, training_start_date
                     ) VALUES (
                         %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
                         %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
-                        %(fitness_level)s, %(weekly_volume)s
+                        %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s
                     )
                     """
                     cursor.execute(query, {**profile_data, "user_id": user_id})

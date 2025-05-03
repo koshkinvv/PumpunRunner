@@ -697,6 +697,7 @@ class RunnerProfileConversation:
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
+                STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
                 STATES['CONFIRMATION']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_data)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)],
