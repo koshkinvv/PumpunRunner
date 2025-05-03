@@ -249,38 +249,53 @@ class DBManager:
                     return None
                 
                 # Parse current weekly volume
-                current_volume_str = profile[0]
-                current_min = 0
+                current_volume = profile[0]
+                new_weekly_volume = ""
                 
-                # Try to parse the weekly volume range (e.g. "10-25 км/неделю")
+                # Try to parse the weekly volume
                 try:
-                    # Handle different volume formats
-                    if "-" in current_volume_str:
-                        parts = current_volume_str.split("-")
-                        current_min = float(parts[0])
-                        current_max = float(parts[1].split()[0])  # Remove "км/неделю"
-                        new_min = current_min + additional_km
-                        new_max = current_max + additional_km
-                        new_weekly_volume = f"{new_min:.1f}-{new_max:.1f} км/неделю"
-                    elif "+" in current_volume_str:
-                        parts = current_volume_str.split("+")
-                        base_value = float(parts[0])
-                        new_value = base_value + additional_km
-                        new_weekly_volume = f"{new_value:.1f}+ км/неделю"
-                    else:
-                        # Try to extract just the number
-                        import re
-                        match = re.search(r'(\d+(\.\d+)?)', current_volume_str)
-                        if match:
-                            current_volume = float(match.group(1))
-                            new_volume = current_volume + additional_km
-                            new_weekly_volume = f"{new_volume:.1f} км/неделю"
+                    # Если weekly_volume число или строка с числом
+                    if isinstance(current_volume, (int, float)):
+                        current_value = float(current_volume)
+                        new_value = current_value + additional_km
+                        new_weekly_volume = f"{new_value:.1f}"
+                    elif isinstance(current_volume, str):
+                        # Обработка строковых форматов с единицами измерения
+                        if "-" in current_volume:
+                            parts = current_volume.split("-")
+                            current_min = float(parts[0])
+                            current_max = float(parts[1].split()[0])  # Remove "км/неделю"
+                            new_min = current_min + additional_km
+                            new_max = current_max + additional_km
+                            new_weekly_volume = f"{new_min:.1f}-{new_max:.1f} км/неделю"
+                        elif "+" in current_volume:
+                            parts = current_volume.split("+")
+                            base_value = float(parts[0])
+                            new_value = base_value + additional_km
+                            new_weekly_volume = f"{new_value:.1f}+ км/неделю"
                         else:
-                            # Fallback: just create a new value
-                            new_weekly_volume = f"{additional_km:.1f} км/неделю"
-                except (ValueError, IndexError):
-                    # If parsing fails, just use the additional km
-                    new_weekly_volume = f"{additional_km:.1f} км/неделю"
+                            # Попытка извлечь число из строки
+                            import re
+                            match = re.search(r'(\d+(\.\d+)?)', current_volume)
+                            if match:
+                                current_value = float(match.group(1))
+                                new_value = current_value + additional_km
+                                # Сохраняем формат с единицами измерения, если есть
+                                if "км/неделю" in current_volume:
+                                    new_weekly_volume = f"{new_value:.1f} км/неделю"
+                                else:
+                                    new_weekly_volume = f"{new_value:.1f}"
+                            else:
+                                # Если не удалось распарсить, просто создаем новое значение
+                                new_weekly_volume = f"{additional_km:.1f}"
+                    else:
+                        # Если формат не определен, используем просто число
+                        new_weekly_volume = f"{additional_km:.1f}"
+                except (ValueError, TypeError, IndexError) as parsing_error:
+                    # Логируем ошибку парсинга для отладки
+                    print(f"Error parsing weekly volume: {parsing_error}")
+                    # Если парсинг не удался, используем дополнительные километры
+                    new_weekly_volume = f"{additional_km:.1f}"
                 
                 # Update weekly volume
                 cursor.execute(

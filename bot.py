@@ -253,6 +253,38 @@ async def callback_query_handler(update, context):
                     await query.message.reply_text(
                         f"✅ Тренировка на день {day_number} отмечена как выполненная!"
                     )
+                
+                # Проверяем, все ли тренировки выполнены или отменены
+                completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+                processed_days = completed_days + canceled_days
+                
+                # Количество тренировок в плане
+                total_days = len(plan['plan_data']['training_days'])
+                
+                # Проверка, все ли тренировки выполнены или отменены
+                has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
+                
+                # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
+                if not has_pending_trainings:
+                    # Расчет общего пройденного расстояния
+                    total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                    
+                    # Обновление еженедельного объема в профиле пользователя
+                    new_volume = DBManager.update_weekly_volume(db_user_id, total_distance)
+                    
+                    # Создание кнопки для продолжения тренировок
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+                    ])
+                    
+                    # Отправка сообщения пользователю
+                    await query.message.reply_text(
+                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                        f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {new_volume}.\n\n"
+                        f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                        reply_markup=keyboard
+                    )
             else:
                 await query.message.reply_text("❌ Не удалось отметить тренировку как выполненную.")
                 
@@ -302,6 +334,38 @@ async def callback_query_handler(update, context):
                     # Если не удается обновить, отправляем новое сообщение
                     await query.message.reply_text(
                         f"❌ Тренировка на день {day_number} отмечена как отмененная!"
+                    )
+                
+                # Проверяем, все ли тренировки выполнены или отменены
+                completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+                processed_days = completed_days + canceled_days
+                
+                # Количество тренировок в плане
+                total_days = len(plan['plan_data']['training_days'])
+                
+                # Проверка, все ли тренировки выполнены или отменены
+                has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
+                
+                # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
+                if not has_pending_trainings:
+                    # Расчет общего пройденного расстояния
+                    total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                    
+                    # Обновление еженедельного объема в профиле пользователя
+                    new_volume = DBManager.update_weekly_volume(db_user_id, total_distance)
+                    
+                    # Создание кнопки для продолжения тренировок
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+                    ])
+                    
+                    # Отправка сообщения пользователю
+                    await query.message.reply_text(
+                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                        f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {new_volume}.\n\n"
+                        f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                        reply_markup=keyboard
                     )
             else:
                 await query.message.reply_text("❌ Не удалось отметить тренировку как отмененную.")
