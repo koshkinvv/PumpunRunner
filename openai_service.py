@@ -31,9 +31,18 @@ class OpenAIService:
             # Prepare prompt with runner profile information
             prompt = self._create_prompt(runner_profile)
             
-            # Получаем текущую дату
-            from datetime import datetime
-            today = datetime.now().strftime("%d.%m.%Y")
+            # Получаем текущую дату и последующие даты для тренировок
+            from datetime import datetime, timedelta
+            
+            # Генерируем все 7 дат для плана
+            today = datetime.now()
+            dates = []
+            for i in range(7):
+                date = today + timedelta(days=i)
+                dates.append(date.strftime("%d.%m.%Y"))
+            
+            today_str = dates[0]
+            tomorrow_str = dates[1]
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -42,9 +51,10 @@ class OpenAIService:
                     {"role": "system", "content": 
                      f"Ты опытный беговой тренер. Твоя задача - создать персонализированный план "
                      f"тренировок на 7 дней, основываясь на профиле бегуна. "
-                     f"План ДОЛЖЕН начинаться с сегодняшней даты ({today}) "
-                     f"и быть структурирован по дням недели с конкретными датами. План должен включать детальное "
-                     f"описание каждой тренировки (дистанция, темп, тип тренировки). "
+                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с СЕГОДНЯШНЕЙ даты ({today_str}), а завтрашний день должен быть ({tomorrow_str}). "
+                     f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
+                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {today_str} для тренировок, это критически важно! "
+                     f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
                      f"Учитывай цель бегуна, его физическую подготовку и еженедельный объем. "
                      f"Отвечай только в указанном JSON формате на русском языке."
                     },
@@ -136,7 +146,35 @@ class OpenAIService:
             Dictionary containing a new training plan for 7 days
         """
         try:
-            # Create basic profile information
+            # Проверяем, как быстро пользователь выполнил предыдущий план
+            from datetime import datetime, timedelta
+            
+            # Пытаемся получить информацию о сроках выполнения предыдущего плана
+            rapid_completion = False
+            days_passed = 7  # По умолчанию считаем, что план выполнялся неделю
+            try:
+                if current_plan and 'id' in current_plan:
+                    # Получаем время создания плана
+                    plan_creation_time = current_plan.get('created_at')
+                    if plan_creation_time:
+                        # Преобразуем строку времени в объект datetime
+                        if isinstance(plan_creation_time, str):
+                            plan_creation_time = datetime.strptime(plan_creation_time, "%Y-%m-%d %H:%M:%S")
+                        
+                        # Текущее время
+                        current_time = datetime.now()
+                        
+                        # Рассчитываем разницу во времени
+                        time_difference = current_time - plan_creation_time
+                        days_passed = time_difference.days
+                        
+                        # Если план был выполнен менее чем за 3 дня, считаем это быстрым выполнением
+                        if days_passed < 3:
+                            rapid_completion = True
+            except Exception as e:
+                logging.warning(f"Error checking plan completion timing: {e}")
+            
+            # Создаем основную информацию о профиле
             profile_info = f"""Создай продолжение плана беговых тренировок на 7 дней для бегуна со следующим профилем:
 
 - Целевая дистанция: {runner_profile.get('distance', 'Неизвестно')} км
@@ -148,22 +186,39 @@ class OpenAIService:
 - Цель: {runner_profile.get('goal', 'Неизвестно')}
 """
             
-            # Add target time if goal is to improve time
+            # Добавляем целевое время, если цель - улучшить время
             if runner_profile.get('goal') == 'Улучшить время':
                 profile_info += f"- Целевое время: {runner_profile.get('target_time', 'Неизвестно')}\n"
                 
-            # Add fitness level and weekly volume
+            # Добавляем уровень физической подготовки и недельный объем
             profile_info += f"""- Уровень физической подготовки: {runner_profile.get('fitness_level', 'Неизвестно')}
-- Еженедельный объем бега: {runner_profile.get('weekly_volume', 'Неизвестно')}
+- Еженедельный объем бега: {runner_profile.get('weekly_volume', 'Неизвестно')} км
 
-- Бегун успешно выполнил предыдущий план тренировок и пробежал в общей сложности {completed_distances:.1f} км.
+- Бегун успешно выполнил предыдущий план тренировок за {days_passed} дней и пробежал в общей сложности {completed_distances:.1f} км.
 
 ВАЖНО: Этот план является ПРОДОЛЖЕНИЕМ предыдущего! Учитывай рост физической подготовки и повышение выносливости бегуна. Увеличь нагрузку и интенсивность тренировок по сравнению с предыдущим планом.
+"""
+            
+            # Если пользователь выполнил план очень быстро, делаем план еще более интенсивным
+            if rapid_completion:
+                profile_info += f"""
+ОЧЕНЬ ВАЖНО: Бегун выполнил предыдущий план чрезвычайно быстро (всего за {days_passed} дней)!
+Это однозначно указывает на то, что его физическая форма значительно лучше ожидаемой.
+Необходимо значительно увеличить интенсивность и сложность нового плана:
 
+1. Увеличь километраж каждой тренировки минимум на 30-40%
+2. Существенно увеличь интенсивность и целевой темп всех тренировок
+3. Добавь не менее 2-3 сложных интервальных тренировок для развития скоростных качеств и выносливости
+4. Включи в план более длинные и сложные тренировки для развития выносливости
+5. Повысь сложность всех упражнений, учитывая высокий уровень готовности бегуна
+"""
+            
+            # Добавляем сводку по предыдущему плану
+            profile_info += """
 Предыдущий план включал следующие типы тренировок:
 """
             
-            # Add summary of previous plan
+            # Создаем сводку по типам тренировок
             training_types = {}
             for day in current_plan.get('training_days', []):
                 training_type = day.get('training_type', '')
@@ -172,11 +227,12 @@ class OpenAIService:
                 else:
                     training_types[training_type] = 1
             
+            # Формируем строку со сводкой
             training_summary = ""
             for training_type, count in training_types.items():
                 training_summary += f"- {training_type}: {count} раз\n"
             
-            # Instructions for the new plan
+            # Инструкции для нового плана
             instructions = """
 План должен включать разнообразные тренировки (длительные, темповые, интервальные, восстановительные) с учетом возросшего уровня подготовки бегуна.
 
@@ -199,27 +255,35 @@ class OpenAIService:
       "distance": "Дистанция в км",
       "pace": "Целевой темп",
       "description": "Подробное описание тренировки"
-    },
-    ...
+    }
   ]
 }
 """
             
-            # Combine all parts of the prompt
+            # Объединяем все части подсказки
             prompt = profile_info + training_summary + instructions
             
-            # Получаем текущую дату
-            from datetime import datetime
-            today = datetime.now().strftime("%d.%m.%Y")
+            # Получаем текущую дату и последующие даты для тренировок
+            # Генерируем все 7 дат для плана
+            today = datetime.now()
+            dates = []
+            for i in range(7):
+                date = today + timedelta(days=i)
+                dates.append(date.strftime("%d.%m.%Y"))
             
-            # Call OpenAI API
+            today_str = dates[0]
+            tomorrow_str = dates[1]
+            
+            # Вызываем API OpenAI
             response = self.client.chat.completions.create(
                 model=MODEL,
                 messages=[
                     {"role": "system", "content": 
                      f"Ты опытный беговой тренер. Твоя задача - создать продолжение персонализированного плана "
                      f"тренировок на 7 дней, основываясь на профиле бегуна и на результатах предыдущих тренировок. "
-                     f"План ДОЛЖЕН начинаться с сегодняшней даты ({today}) и быть структурирован по дням недели с конкретными датами. "
+                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с СЕГОДНЯШНЕЙ даты ({today_str}), а завтрашний день должен быть ({tomorrow_str}). "
+                     f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
+                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {today_str} для тренировок, это критически важно! "
                      f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
                      f"Учитывай, что бегун стал сильнее после завершения предыдущего плана, поэтому новый план должен "
                      f"быть более интенсивным, с увеличенным километражем и сложностью. "
@@ -231,7 +295,7 @@ class OpenAIService:
                 temperature=0.7
             )
             
-            # Parse and return the response
+            # Разбираем и возвращаем ответ
             plan_json = json.loads(response.choices[0].message.content)
             return plan_json
             

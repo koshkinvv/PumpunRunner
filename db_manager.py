@@ -193,8 +193,32 @@ class DBManager:
         """
         conn = None
         try:
+            # Проверяем корректность user_id
+            if not user_id or not isinstance(user_id, int):
+                logging.warning(f"Invalid user_id provided to get_runner_profile: {user_id}")
+                return None
+            
             conn = DBManager.get_connection()
+            if not conn:
+                logging.error("Failed to establish database connection in get_runner_profile")
+                return None
+                
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Проверим существование таблицы
+                cursor.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'runner_profiles'
+                    )
+                    """
+                )
+                table_exists = cursor.fetchone()[0]
+                if not table_exists:
+                    logging.error("Table 'runner_profiles' does not exist")
+                    return None
+                
+                # Получаем профиль бегуна
                 cursor.execute(
                     """
                     SELECT * FROM runner_profiles 
@@ -207,11 +231,120 @@ class DBManager:
                 profile = cursor.fetchone()
                 
                 if profile:
-                    return dict(profile)
-                return None
+                    logging.info(f"Found profile for user_id {user_id}")
+                    # Преобразуем профиль в словарь и проверяем наличие важных полей
+                    profile_dict = dict(profile)
+                    
+                    # Логируем для отладки
+                    logging.info(f"Profile data: {profile_dict.keys()}")
+                    
+                    return profile_dict
+                else:
+                    logging.warning(f"No profile found for user_id {user_id}")
+                    return None
                 
         except Exception as e:
             logging.error(f"Error getting runner profile: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
+    def create_default_runner_profile(user_id):
+        """
+        Create a default runner profile for emergency situations when profile is missing
+        but we need to continue the training plan.
+        
+        Args:
+            user_id: Database user ID
+            
+        Returns:
+            Dictionary containing the created profile if successful, None otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            if not conn:
+                logging.error("Failed to establish database connection in create_default_runner_profile")
+                return None
+            
+            # Создаем стандартный профиль для пользователя
+            with conn.cursor() as cursor:
+                # Проверим существование таблицы
+                cursor.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'runner_profiles'
+                    )
+                    """
+                )
+                table_exists = cursor.fetchone()[0]
+                if not table_exists:
+                    logging.error("Table 'runner_profiles' does not exist")
+                    return None
+                
+                # Значения по умолчанию
+                default_profile = {
+                    "distance": "10", 
+                    "competition_date": "2025-12-31",  # Дата соревнования в будущем
+                    "gender": "Мужской",
+                    "age": "30",
+                    "height": "175",
+                    "weight": "70",
+                    "experience": "1-3 года",
+                    "goal": "Улучшить время",
+                    "target_time": "00:45:00",
+                    "fitness_level": "Средний",
+                    "weekly_volume": "15",
+                    "training_start_date": datetime.now().strftime("%Y-%m-%d")
+                }
+                
+                # Вставляем профиль
+                query = """
+                INSERT INTO runner_profiles (
+                    user_id, distance, competition_date, gender, age, 
+                    height, weight, experience, goal, target_time, 
+                    fitness_level, weekly_volume, training_start_date
+                ) VALUES (
+                    %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
+                    %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
+                    %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s
+                ) RETURNING *
+                """
+                cursor.execute(query, {**default_profile, "user_id": user_id})
+                
+                created_profile = cursor.fetchone()
+                conn.commit()
+                
+                if created_profile:
+                    logging.info(f"Created default profile for user_id: {user_id}")
+                    # Получаем созданный профиль
+                    cursor.execute(
+                        """
+                        SELECT * FROM runner_profiles 
+                        WHERE user_id = %s 
+                        ORDER BY updated_at DESC 
+                        LIMIT 1
+                        """,
+                        (user_id,)
+                    )
+                    
+                    # Исключаем прямой возврат cursor_factory результата
+                    profile = cursor.fetchone()
+                    if profile:
+                        columns = [desc[0] for desc in cursor.description]
+                        profile_dict = dict(zip(columns, profile))
+                        return profile_dict
+            
+            logging.warning(f"Failed to create default profile for user_id: {user_id}")
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error creating default runner profile: {e}")
+            if conn:
+                conn.rollback()
             return None
         finally:
             if conn:

@@ -2,6 +2,7 @@ import logging
 import os
 import asyncio
 from bot_modified import setup_bot
+from app import app  # Импортируем объект Flask app из app.py
 
 def main():
     """Main function to start the Telegram bot."""
