@@ -11,6 +11,7 @@ from telegram import Bot, InlineKeyboardMarkup, InlineKeyboardButton
 from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
 from config import TELEGRAM_TOKEN
+from bot_modified import format_weekly_volume
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, 
@@ -70,17 +71,15 @@ async def check_plan_status_for_user(telegram_id, username=''):
                 [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
             ])
             
-            # Проверка и подготовка значения еженедельного объема для отображения
-            volume_display = new_volume
-            if not volume_display or volume_display == "None" or volume_display is None:
-                volume_display = f"{total_distance:.1f}"
-                
+            # Форматирование объема бега для отображения
+            formatted_volume = format_weekly_volume(new_volume, str(total_distance))
+            
             # Отправка сообщения пользователю
             await bot.send_message(
                 chat_id=telegram_id,
                 text=(
                     f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
-                    f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {volume_display} км/неделю.\n\n"
+                    f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {formatted_volume}.\n\n"
                     f"Хотите продолжить тренировки с учетом вашего прогресса?"
                 ),
                 reply_markup=keyboard

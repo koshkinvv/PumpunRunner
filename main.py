@@ -1,25 +1,24 @@
-import asyncio
+import logging
 import os
-from bot import setup_bot
-from config import logging
-from app import app
+import asyncio
+from bot_modified import setup_bot
 
 def main():
     """Main function to start the Telegram bot."""
-    try:
-        # Set up and start the bot
-        application = setup_bot()
-        
-        # Log successful startup
-        logging.info("Runner profile bot started successfully!")
-        
-        # Run the bot until the user presses Ctrl-C
-        application.run_polling(allowed_updates=["message", "callback_query"])
-        
-    except Exception as e:
-        logging.error(f"Error running bot: {e}")
-        raise
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO, 
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Get the bot application
+    application = setup_bot()
+    
+    # Log startup message
+    logging.info("Runner profile bot started successfully!")
+    
+    # Run the bot until the user sends a signal to stop it (e.g. pressing Ctrl+C)
+    application.run_polling()
 
-if __name__ == "__main__":
-    # Run the main function
+if __name__ == '__main__':
     main()
