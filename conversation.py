@@ -556,10 +556,24 @@ class RunnerProfileConversation:
             
             # Save profile to database
             if DBManager.save_runner_profile(user_id, profile_data):
+                from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+                
+                # Создаем клавиатуру с кнопкой для генерации плана
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏋️ Подготовить план тренировок", callback_data="generate_plan")]
+                ])
+                
                 await update.message.reply_text(
                     "🎉 Отлично! Ваш профиль бегуна успешно сохранен. "
                     "Спасибо за предоставленную информацию!",
                     reply_markup=ReplyKeyboardRemove()
+                )
+                
+                # Отправляем сообщение с кнопкой для генерации плана
+                await update.message.reply_text(
+                    "Теперь вы можете получить персонализированный план тренировок, "
+                    "основанный на вашем профиле. Нажмите на кнопку ниже или используйте команду /plan.",
+                    reply_markup=keyboard
                 )
             else:
                 await update.message.reply_text(

@@ -130,7 +130,7 @@ async def callback_query_handler(update, context):
             )
             await query.message.reply_text(day_message, parse_mode='Markdown')
             
-    elif query.data == 'new_plan':
+    elif query.data == 'new_plan' or query.data == 'generate_plan':
         # Generate new plan
         await query.message.reply_text("⏳ Генерирую новый персонализированный план тренировок. Это может занять некоторое время...")
         
