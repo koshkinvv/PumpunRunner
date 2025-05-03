@@ -6,14 +6,14 @@ from conversation import RunnerProfileConversation
 async def help_command(update, context):
     """Handler for the /help command."""
     help_text = (
-        "🏃‍♂️ *Runner Profile Bot Help* 🏃‍♀️\n\n"
-        "This bot helps you create your runner profile by answering a series of questions.\n\n"
-        "*Available commands:*\n"
-        "/start - Start or restart the profile creation process\n"
-        "/help - Show this help message\n"
-        "/cancel - Cancel the current conversation\n\n"
-        "During the profile creation, I'll ask you about your running goals, physical parameters, "
-        "and training habits. You can cancel at any time using the /cancel command."
+        "🏃‍♂️ *Помощь по Боту Профиля Бегуна* 🏃‍♀️\n\n"
+        "Этот бот поможет вам создать профиль бегуна, ответив на серию вопросов.\n\n"
+        "*Доступные команды:*\n"
+        "/start - Начать или перезапустить процесс создания профиля\n"
+        "/help - Показать это сообщение помощи\n"
+        "/cancel - Отменить текущий разговор\n\n"
+        "Во время создания профиля я задам вам вопросы о ваших беговых целях, физических параметрах "
+        "и тренировочных привычках. Вы можете отменить процесс в любое время, используя команду /cancel."
     )
     await update.message.reply_text(help_text, parse_mode='Markdown')
 

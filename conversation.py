@@ -28,7 +28,7 @@ class RunnerProfileConversation:
         
         if not user_id:
             await update.message.reply_text(
-                "Sorry, there was an error starting the conversation. Please try again later."
+                "Извините, произошла ошибка при запуске диалога. Пожалуйста, попробуйте позже."
             )
             return ConversationHandler.END
         
@@ -37,9 +37,9 @@ class RunnerProfileConversation:
         context.user_data['profile_data'] = {}
         
         await update.message.reply_text(
-            f"Hi {user.first_name}! I'll help you create your runner profile. "
-            "Let's start with some basic information about your running goals.\n\n"
-            "What's your target running distance in kilometers?"
+            f"Привет, {user.first_name}! Я помогу вам создать ваш профиль бегуна. "
+            "Давайте начнем с основной информации о ваших беговых целях.\n\n"
+            "Какую дистанцию бега вы планируете пробежать (в километрах)?"
         )
         
         return STATES['DISTANCE']
@@ -53,21 +53,21 @@ class RunnerProfileConversation:
             distance = float(text.replace(',', '.'))
             if distance <= 0:
                 await update.message.reply_text(
-                    "Please enter a positive distance value."
+                    "Пожалуйста, введите положительное значение дистанции."
                 )
                 return STATES['DISTANCE']
             
             context.user_data['profile_data']['distance'] = distance
             
             await update.message.reply_text(
-                f"Great! You're planning to run {distance} km.\n\n"
-                "When is your competition? Please enter the date in DD.MM.YYYY format."
+                f"Отлично! Вы планируете пробежать {distance} км.\n\n"
+                "Когда у вас соревнование? Пожалуйста, введите дату в формате ДД.ММ.ГГГГ."
             )
             return STATES['COMPETITION_DATE']
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter a valid numeric distance in kilometers."
+                "Пожалуйста, введите корректное числовое значение дистанции в километрах."
             )
             return STATES['DISTANCE']
     
@@ -81,7 +81,7 @@ class RunnerProfileConversation:
         
         if not match:
             await update.message.reply_text(
-                "Please enter the date in DD.MM.YYYY format (e.g., 25.12.2023)."
+                "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 25.12.2023)."
             )
             return STATES['COMPETITION_DATE']
         
@@ -93,7 +93,7 @@ class RunnerProfileConversation:
             
             if date_obj < today:
                 await update.message.reply_text(
-                    "The competition date should be in the future. Please enter a valid date."
+                    "Дата соревнования должна быть в будущем. Пожалуйста, введите корректную дату."
                 )
                 return STATES['COMPETITION_DATE']
             
@@ -101,20 +101,20 @@ class RunnerProfileConversation:
             
             # Ask for gender with keyboard
             reply_markup = ReplyKeyboardMarkup(
-                [['Male', 'Female']], 
+                [['Мужской', 'Женский']], 
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             
             await update.message.reply_text(
-                "What is your gender?",
+                "Укажите ваш пол:",
                 reply_markup=reply_markup
             )
             return STATES['GENDER']
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter a valid date in DD.MM.YYYY format."
+                "Пожалуйста, введите корректную дату в формате ДД.ММ.ГГГГ."
             )
             return STATES['COMPETITION_DATE']
     
@@ -122,14 +122,14 @@ class RunnerProfileConversation:
         """Collect gender information."""
         text = update.message.text.strip()
         
-        if text not in ['Male', 'Female']:
+        if text not in ['Мужской', 'Женский']:
             reply_markup = ReplyKeyboardMarkup(
-                [['Male', 'Female']], 
+                [['Мужской', 'Женский']], 
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Please select 'Male' or 'Female'.",
+                "Пожалуйста, выберите 'Мужской' или 'Женский'.",
                 reply_markup=reply_markup
             )
             return STATES['GENDER']
@@ -137,7 +137,7 @@ class RunnerProfileConversation:
         context.user_data['profile_data']['gender'] = text
         
         await update.message.reply_text(
-            "What is your age?",
+            "Сколько вам лет?",
             reply_markup=ReplyKeyboardRemove()
         )
         return STATES['AGE']
@@ -150,20 +150,20 @@ class RunnerProfileConversation:
             age = int(text)
             if age < 10 or age > 120:
                 await update.message.reply_text(
-                    "Please enter a valid age between 10 and 120 years."
+                    "Пожалуйста, введите корректный возраст от 10 до 120 лет."
                 )
                 return STATES['AGE']
             
             context.user_data['profile_data']['age'] = age
             
             await update.message.reply_text(
-                "What is your height in centimeters?"
+                "Какой у вас рост в сантиметрах?"
             )
             return STATES['HEIGHT']
             
         except ValueError:
             await update.message.reply_text(
-                "Please enter your age as a whole number."
+                "Пожалуйста, введите ваш возраст целым числом."
             )
             return STATES['AGE']
     
