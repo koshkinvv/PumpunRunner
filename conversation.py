@@ -36,10 +36,18 @@ class RunnerProfileConversation:
         context.user_data['db_user_id'] = user_id
         context.user_data['profile_data'] = {}
         
+        # Предложить стандартные дистанции
+        reply_markup = ReplyKeyboardMarkup(
+            [['5', '10'], ['21', '42']], 
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
         await update.message.reply_text(
             f"Привет, {user.first_name}! Я помогу вам создать ваш профиль бегуна. "
             "Давайте начнем с основной информации о ваших беговых целях.\n\n"
-            "Какую дистанцию бега вы планируете пробежать (в километрах)?"
+            "Какую дистанцию бега вы планируете пробежать (в километрах)?",
+            reply_markup=reply_markup
         )
         
         return STATES['DISTANCE']
@@ -59,9 +67,18 @@ class RunnerProfileConversation:
             
             context.user_data['profile_data']['distance'] = distance
             
+            # Добавляем кнопку "Нет" для выбора
+            reply_markup = ReplyKeyboardMarkup(
+                [['Нет']],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+            
             await update.message.reply_text(
                 f"Отлично! Вы планируете пробежать {distance} км.\n\n"
-                "Когда у вас соревнование? Пожалуйста, введите дату в формате ДД.ММ.ГГГГ."
+                "Когда у вас соревнование? Пожалуйста, введите дату в формате ДД.ММ.ГГГГ "
+                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
             
@@ -75,13 +92,37 @@ class RunnerProfileConversation:
         """Collect and validate competition date."""
         text = update.message.text.strip()
         
+        # Обработка варианта "Нет"
+        if text == 'Нет':
+            context.user_data['profile_data']['competition_date'] = 'Нет конкретной даты'
+            
+            # Ask for gender with keyboard
+            reply_markup = ReplyKeyboardMarkup(
+                [['Мужской', 'Женский']], 
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+            
+            await update.message.reply_text(
+                "Укажите ваш пол:",
+                reply_markup=reply_markup
+            )
+            return STATES['GENDER']
+        
         # Validate date format
         date_pattern = r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$'
         match = re.match(date_pattern, text)
         
         if not match:
+            reply_markup = ReplyKeyboardMarkup(
+                [['Нет']],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
             await update.message.reply_text(
-                "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 25.12.2023)."
+                "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 25.12.2023) "
+                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
         
@@ -92,8 +133,15 @@ class RunnerProfileConversation:
             today = datetime.now()
             
             if date_obj < today:
+                reply_markup = ReplyKeyboardMarkup(
+                    [['Нет']],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
                 await update.message.reply_text(
-                    "Дата соревнования должна быть в будущем. Пожалуйста, введите корректную дату."
+                    "Дата соревнования должна быть в будущем. Пожалуйста, введите корректную дату "
+                    "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                    reply_markup=reply_markup
                 )
                 return STATES['COMPETITION_DATE']
             
@@ -113,8 +161,15 @@ class RunnerProfileConversation:
             return STATES['GENDER']
             
         except ValueError:
+            reply_markup = ReplyKeyboardMarkup(
+                [['Нет']],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
             await update.message.reply_text(
-                "Пожалуйста, введите корректную дату в формате ДД.ММ.ГГГГ."
+                "Пожалуйста, введите корректную дату в формате ДД.ММ.ГГГГ "
+                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
     
