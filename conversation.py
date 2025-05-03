@@ -532,7 +532,6 @@ class RunnerProfileConversation:
         
         if text == 'Не знаю':
             # Используем текущую дату
-            from datetime import datetime
             today = datetime.now().strftime("%d.%m.%Y")
             context.user_data['profile_data']['training_start_date'] = today
             context.user_data['profile_data']['training_start_date_text'] = "Сегодня"
@@ -557,7 +556,6 @@ class RunnerProfileConversation:
             
             # Проверка валидности даты
             try:
-                from datetime import datetime
                 # Добавляем текущий год к дате
                 date_obj = datetime(current_year, month, day)
                 date_str = date_obj.strftime("%d.%m.%Y")
