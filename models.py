@@ -65,6 +65,18 @@ def create_tables():
         )
         """)
         
+        # Create completed_trainings table for tracking training completion status
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS completed_trainings (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            plan_id INTEGER REFERENCES training_plans(id) ON DELETE CASCADE,
+            training_day INTEGER NOT NULL,
+            completed BOOLEAN DEFAULT TRUE,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
         conn.commit()
         logging.info("Tables created successfully")
     except Exception as e:

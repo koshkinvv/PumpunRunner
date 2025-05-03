@@ -110,16 +110,28 @@ async def generate_plan_command(update, context):
             parse_mode='Markdown'
         )
         
+        # Get completed trainings
+        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        
         # Send each training day
         for idx, day in enumerate(plan['training_days']):
+            training_day_num = idx + 1
+            completed_mark = "✅ " if training_day_num in completed_days else ""
+            
             day_message = (
-                f"*День {idx+1}: {day['day']}*\n"
+                f"{completed_mark}*День {training_day_num}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"
                 f"{day['description']}"
             )
-            await update.message.reply_text(day_message, parse_mode='Markdown')
+            
+            # Create "Выполнено" button for each training day
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+            ])
+            
+            await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
     
     except Exception as e:
         logging.error(f"Error generating training plan: {e}")
@@ -146,16 +158,29 @@ async def callback_query_handler(update, context):
             parse_mode='Markdown'
         )
         
+        # Get completed trainings
+        plan_id = plan['id']
+        completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        
         # Send each training day
         for idx, day in enumerate(plan['plan_data']['training_days']):
+            training_day_num = idx + 1
+            completed_mark = "✅ " if training_day_num in completed_days else ""
+            
             day_message = (
-                f"*День {idx+1}: {day['day']}*\n"
+                f"{completed_mark}*День {training_day_num}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"
                 f"{day['description']}"
             )
-            await query.message.reply_text(day_message, parse_mode='Markdown')
+            
+            # Create "Выполнено" button for each training day
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+            ])
+            
+            await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
     elif query.data == 'new_plan' or query.data == 'generate_plan':
         # Generate new plan
@@ -186,7 +211,7 @@ async def callback_query_handler(update, context):
         # Send each training day
         for idx, day in enumerate(plan['training_days']):
             day_message = (
-                f"*День {idx+1}: {day['day']}*\n"
+                f"*День {idx+1}: {day['day']} ({day['date']})*\n"
                 f"Тип: {day['training_type']}\n"
                 f"Дистанция: {day['distance']}\n"
                 f"Темп: {day['pace']}\n\n"

@@ -145,3 +145,102 @@ class TrainingPlanManager:
         finally:
             if conn:
                 conn.close()
+                
+    @staticmethod
+    def mark_training_completed(user_id, plan_id, training_day):
+        """
+        Mark a training day as completed.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            training_day: Day number in the training plan (1-based)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                # Check if this training day is already marked
+                cursor.execute(
+                    """
+                    SELECT id FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s AND training_day = %s
+                    """,
+                    (user_id, plan_id, training_day)
+                )
+                
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Already marked, update timestamp
+                    cursor.execute(
+                        """
+                        UPDATE completed_trainings 
+                        SET completed_at = CURRENT_TIMESTAMP 
+                        WHERE id = %s
+                        """,
+                        (existing[0],)
+                    )
+                else:
+                    # New completion
+                    cursor.execute(
+                        """
+                        INSERT INTO completed_trainings (
+                            user_id, plan_id, training_day
+                        ) VALUES (
+                            %s, %s, %s
+                        )
+                        """,
+                        (user_id, plan_id, training_day)
+                    )
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logging.error(f"Error marking training as completed: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
+    def get_completed_trainings(user_id, plan_id):
+        """
+        Get a list of completed training days for a plan.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            
+        Returns:
+            List of completed training day numbers
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT training_day 
+                    FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s
+                    ORDER BY training_day
+                    """,
+                    (user_id, plan_id)
+                )
+                
+                results = cursor.fetchall()
+                return [row[0] for row in results]
+                
+        except Exception as e:
+            logging.error(f"Error getting completed trainings: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
