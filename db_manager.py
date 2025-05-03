@@ -216,3 +216,92 @@ class DBManager:
         finally:
             if conn:
                 conn.close()
+    
+    @staticmethod
+    def update_weekly_volume(user_id, additional_km):
+        """
+        Update the weekly volume in the runner profile by adding completed kilometers.
+        
+        Args:
+            user_id: Database user ID
+            additional_km: Additional kilometers to add to the weekly volume
+            
+        Returns:
+            Updated weekly volume if successful, None otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                # Get current weekly volume
+                cursor.execute(
+                    """
+                    SELECT weekly_volume FROM runner_profiles 
+                    WHERE user_id = %s 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                
+                profile = cursor.fetchone()
+                if not profile:
+                    return None
+                
+                # Parse current weekly volume
+                current_volume_str = profile[0]
+                current_min = 0
+                
+                # Try to parse the weekly volume range (e.g. "10-25 км/неделю")
+                try:
+                    # Handle different volume formats
+                    if "-" in current_volume_str:
+                        parts = current_volume_str.split("-")
+                        current_min = float(parts[0])
+                        current_max = float(parts[1].split()[0])  # Remove "км/неделю"
+                        new_min = current_min + additional_km
+                        new_max = current_max + additional_km
+                        new_weekly_volume = f"{new_min:.1f}-{new_max:.1f} км/неделю"
+                    elif "+" in current_volume_str:
+                        parts = current_volume_str.split("+")
+                        base_value = float(parts[0])
+                        new_value = base_value + additional_km
+                        new_weekly_volume = f"{new_value:.1f}+ км/неделю"
+                    else:
+                        # Try to extract just the number
+                        import re
+                        match = re.search(r'(\d+(\.\d+)?)', current_volume_str)
+                        if match:
+                            current_volume = float(match.group(1))
+                            new_volume = current_volume + additional_km
+                            new_weekly_volume = f"{new_volume:.1f} км/неделю"
+                        else:
+                            # Fallback: just create a new value
+                            new_weekly_volume = f"{additional_km:.1f} км/неделю"
+                except (ValueError, IndexError):
+                    # If parsing fails, just use the additional km
+                    new_weekly_volume = f"{additional_km:.1f} км/неделю"
+                
+                # Update weekly volume
+                cursor.execute(
+                    """
+                    UPDATE runner_profiles 
+                    SET weekly_volume = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = %s
+                    RETURNING weekly_volume
+                    """,
+                    (new_weekly_volume, user_id)
+                )
+                
+                result = cursor.fetchone()
+                conn.commit()
+                return result[0] if result else None
+                
+        except Exception as e:
+            logging.error(f"Error updating weekly volume: {e}")
+            if conn:
+                conn.rollback()
+            return None
+        finally:
+            if conn:
+                conn.close()

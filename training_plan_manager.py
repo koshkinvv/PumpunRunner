@@ -381,3 +381,77 @@ class TrainingPlanManager:
         finally:
             if conn:
                 conn.close()
+                
+    @staticmethod
+    def calculate_total_completed_distance(user_id, plan_id):
+        """
+        Calculate the total distance of completed trainings for a specific plan.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: Training plan ID
+            
+        Returns:
+            Total distance in kilometers (float)
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor() as cursor:
+                # Get the plan data
+                cursor.execute(
+                    """
+                    SELECT plan_data 
+                    FROM training_plans 
+                    WHERE id = %s AND user_id = %s
+                    """,
+                    (plan_id, user_id)
+                )
+                
+                plan_data_row = cursor.fetchone()
+                if not plan_data_row:
+                    return 0
+                
+                plan_data = plan_data_row[0]
+                if isinstance(plan_data, str):
+                    plan_data = json.loads(plan_data)
+                
+                # Get completed trainings
+                cursor.execute(
+                    """
+                    SELECT training_day 
+                    FROM completed_trainings 
+                    WHERE user_id = %s AND plan_id = %s AND status = 'completed'
+                    ORDER BY training_day
+                    """,
+                    (user_id, plan_id)
+                )
+                
+                completed_days = [row[0] for row in cursor.fetchall()]
+                if not completed_days:
+                    return 0
+                
+                # Calculate total distance
+                total_distance = 0
+                for day_num in completed_days:
+                    day_idx = day_num - 1
+                    if day_idx < 0 or day_idx >= len(plan_data.get('training_days', [])):
+                        continue
+                    
+                    day_data = plan_data['training_days'][day_idx]
+                    distance_str = day_data.get('distance', '0 км').split()[0]
+                    try:
+                        distance = float(distance_str)
+                        total_distance += distance
+                    except (ValueError, TypeError):
+                        # Skip if distance cannot be parsed as float
+                        pass
+                
+                return total_distance
+                
+        except Exception as e:
+            logging.error(f"Error calculating total distance: {e}")
+            return 0
+        finally:
+            if conn:
+                conn.close()

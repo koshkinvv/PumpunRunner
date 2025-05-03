@@ -72,20 +72,22 @@ async def pending_trainings_command(update, context):
             )
             return
         
-        # Get completed trainings
+        # Get completed and canceled trainings
         plan_id = plan['id']
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+        processed_days = completed_days + canceled_days
         
-        # Get only pending trainings (not completed)
+        # Get only pending trainings (not completed or canceled)
         pending_trainings = []
         for idx, day in enumerate(plan['plan_data']['training_days']):
             training_day_num = idx + 1
-            if training_day_num not in completed_days:
+            if training_day_num not in processed_days:
                 pending_trainings.append((training_day_num, day))
         
         if not pending_trainings:
             await update.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!"
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!"
             )
             return
         
@@ -106,9 +108,10 @@ async def pending_trainings_command(update, context):
                 f"{day['description']}"
             )
             
-            # Create "Выполнено" button for each training day
+            # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
             ])
             
             await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
@@ -180,16 +183,18 @@ async def generate_plan_command(update, context):
             parse_mode='Markdown'
         )
         
-        # Get completed trainings
+        # Get completed and canceled trainings
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+        processed_days = completed_days + canceled_days
         
         # Send only not completed training days
         has_pending_trainings = False
         for idx, day in enumerate(plan['training_days']):
             training_day_num = idx + 1
             
-            # Skip completed training days
-            if training_day_num in completed_days:
+            # Skip completed and canceled training days
+            if training_day_num in processed_days:
                 continue
                 
             has_pending_trainings = True
@@ -202,18 +207,32 @@ async def generate_plan_command(update, context):
                 f"{day['description']}"
             )
             
-            # Create "Выполнено" button for each training day
+            # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
             ])
             
             await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
-        # If all trainings are completed, show a congratulation message
+        # If all trainings are completed or canceled, show a congratulation message with continue button
         if not has_pending_trainings:
+            # Calculate total completed distance
+            total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+            
+            # Add total distance to user profile
+            new_volume = DBManager.update_weekly_volume(db_user_id, total_distance)
+            
+            # Create continue button
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+            ])
+            
             await update.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
-                "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
+                f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {new_volume}.\n\n"
+                f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                reply_markup=keyboard
             )
     
     except Exception as e:
@@ -256,27 +275,18 @@ async def callback_query_handler(update, context):
                 
                 day = plan['plan_data']['training_days'][day_idx]
                 
-                # Получаем все выполненные тренировки
-                completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
-                
                 # Обновляем сообщение с отметкой о выполнении
-                completed_mark = "✅ " if day_number in completed_days else ""
                 day_message = (
-                    f"{completed_mark}*День {day_number}: {day['day']} ({day['date']})*\n"
+                    f"✅ *День {day_number}: {day['day']} ({day['date']})* - ВЫПОЛНЕНО\n"
                     f"Тип: {day['training_type']}\n"
                     f"Дистанция: {day['distance']}\n"
                     f"Темп: {day['pace']}\n\n"
                     f"{day['description']}"
                 )
                 
-                # Кнопка остается, чтобы можно было снова отметить при необходимости
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{day_number}")]
-                ])
-                
                 try:
                     # Пытаемся обновить сообщение, если это возможно
-                    await query.message.edit_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                    await query.message.edit_text(day_message, parse_mode='Markdown')
                 except Exception:
                     # Если не удается обновить, отправляем новое сообщение
                     await query.message.reply_text(
@@ -287,6 +297,56 @@ async def callback_query_handler(update, context):
                 
         except Exception as e:
             logging.error(f"Error marking training as completed: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
+            
+    # Обработка кнопки отмены тренировки
+    elif query.data.startswith('cancel_'):
+        # Формат: cancel_PLAN_ID_DAY_NUMBER
+        try:
+            _, plan_id, day_number = query.data.split('_')
+            plan_id = int(plan_id)
+            day_number = int(day_number)
+            
+            # Отмечаем тренировку как отмененную
+            success = TrainingPlanManager.mark_training_canceled(db_user_id, plan_id, day_number)
+            
+            if success:
+                # Получаем план снова, чтобы увидеть обновленные отметки
+                plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+                if not plan:
+                    await query.message.reply_text("❌ Не удалось найти план тренировок.")
+                    return
+                
+                # Получаем день тренировки
+                day_idx = day_number - 1
+                if day_idx < 0 or day_idx >= len(plan['plan_data']['training_days']):
+                    await query.message.reply_text("❌ Неверный номер тренировки.")
+                    return
+                
+                day = plan['plan_data']['training_days'][day_idx]
+                
+                # Обновляем сообщение с отметкой об отмене
+                day_message = (
+                    f"❌ *День {day_number}: {day['day']} ({day['date']})* - ОТМЕНЕНО\n"
+                    f"Тип: {day['training_type']}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                try:
+                    # Пытаемся обновить сообщение, если это возможно
+                    await query.message.edit_text(day_message, parse_mode='Markdown')
+                except Exception:
+                    # Если не удается обновить, отправляем новое сообщение
+                    await query.message.reply_text(
+                        f"❌ Тренировка на день {day_number} отмечена как отмененная!"
+                    )
+            else:
+                await query.message.reply_text("❌ Не удалось отметить тренировку как отмененную.")
+                
+        except Exception as e:
+            logging.error(f"Error marking training as canceled: {e}")
             await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
     
     elif query.data == 'view_plan':
@@ -300,17 +360,19 @@ async def callback_query_handler(update, context):
             parse_mode='Markdown'
         )
         
-        # Get completed trainings
+        # Get completed and canceled trainings
         plan_id = plan['id']
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+        processed_days = completed_days + canceled_days
         
-        # Send only not completed training days
+        # Send only not completed or canceled training days
         has_pending_trainings = False
         for idx, day in enumerate(plan['plan_data']['training_days']):
             training_day_num = idx + 1
             
-            # Skip completed training days
-            if training_day_num in completed_days:
+            # Skip completed and canceled training days
+            if training_day_num in processed_days:
                 continue
                 
             has_pending_trainings = True
@@ -323,17 +385,18 @@ async def callback_query_handler(update, context):
                 f"{day['description']}"
             )
             
-            # Create "Выполнено" button for each training day
+            # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
             ])
             
             await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
-        # If all trainings are completed, show a congratulation message
+        # If all trainings are completed or canceled, show a congratulation message
         if not has_pending_trainings:
             await query.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
                 "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
             )
             
@@ -363,16 +426,18 @@ async def callback_query_handler(update, context):
             parse_mode='Markdown'
         )
         
-        # Get completed trainings
+        # Get completed and canceled trainings
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+        canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+        processed_days = completed_days + canceled_days
             
-        # Send only not completed training days
+        # Send only not completed or canceled training days
         has_pending_trainings = False
         for idx, day in enumerate(plan['training_days']):
             training_day_num = idx + 1
             
-            # Skip completed training days
-            if training_day_num in completed_days:
+            # Skip completed and canceled training days
+            if training_day_num in processed_days:
                 continue
                 
             has_pending_trainings = True
@@ -385,17 +450,18 @@ async def callback_query_handler(update, context):
                 f"{day['description']}"
             )
             
-            # Create "Выполнено" button for each training day
+            # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")]
+                [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
             ])
             
             await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
-        # If all trainings are completed, show a congratulation message
+        # If all trainings are completed or canceled, show a congratulation message
         if not has_pending_trainings:
             await query.message.reply_text(
-                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены!\n\n"
+                "🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
                 "Вы можете создать новый план тренировок, используя команду /plan и выбрав 'Создать новый'."
             )
 
