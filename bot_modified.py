@@ -498,12 +498,30 @@ async def callback_query_handler(update, context):
                 await conversation.start(update, context)
                 return
             
-            # Генерируем новый план тренировок
-            await query.message.reply_text("⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...")
+            # Получаем последний план пользователя
+            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
             
-            # Получаем сервис OpenAI и генерируем план
-            openai_service = OpenAIService()
-            plan = openai_service.generate_training_plan(profile)
+            if not current_plan:
+                # Если нет текущего плана, генерируем новый план с нуля
+                await query.message.reply_text("⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...")
+                
+                # Получаем сервис OpenAI и генерируем план
+                openai_service = OpenAIService()
+                plan = openai_service.generate_training_plan(profile)
+            else:
+                # Если есть текущий план, создаем его продолжение
+                plan_id = current_plan['id']
+                # Проверяем, есть ли завершенные тренировки
+                completed_trainings = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                
+                # Расчет общего пройденного расстояния
+                total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id) 
+                
+                await query.message.reply_text(f"⏳ Генерирую продолжение плана тренировок с учетом вашего прогресса ({total_distance:.1f} км). Это может занять некоторое время...")
+                
+                # Получаем сервис OpenAI и генерируем продолжение плана
+                openai_service = OpenAIService()
+                plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
             
             # Сохраняем план в базу данных
             plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
