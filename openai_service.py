@@ -33,9 +33,14 @@ class OpenAIService:
             
             # Получаем текущую дату и последующие даты для тренировок
             from datetime import datetime, timedelta
+            import pytz
             
-            # Генерируем все 7 дат для плана
-            today = datetime.now()
+            # Генерируем все 7 дат для плана, используя Московское время (UTC+3)
+            # Поскольку сервер работает в UTC, а пользователь, скорее всего, находится в России (UTC+3)
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            today = datetime.now(pytz.UTC).astimezone(moscow_tz)
+            logging.info(f"Текущая дата и время (Москва): {today.strftime('%d.%m.%Y %H:%M:%S')}")
+            
             dates = []
             for i in range(7):
                 date = today + timedelta(days=i)
@@ -43,6 +48,9 @@ class OpenAIService:
             
             today_str = dates[0]
             tomorrow_str = dates[1]
+            
+            logging.info(f"Сгенерированные даты для плана: {dates}")
+            logging.info(f"Сегодня: {today_str}, завтра: {tomorrow_str}")
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -161,11 +169,18 @@ class OpenAIService:
                         if isinstance(plan_creation_time, str):
                             plan_creation_time = datetime.strptime(plan_creation_time, "%Y-%m-%d %H:%M:%S")
                         
-                        # Текущее время
-                        current_time = datetime.now()
+                        # Текущее время с учетом часового пояса Москвы
+                        import pytz
+                        moscow_tz = pytz.timezone('Europe/Moscow')
+                        current_time = datetime.now(pytz.UTC).astimezone(moscow_tz)
                         
                         # Рассчитываем разницу во времени
-                        time_difference = current_time - plan_creation_time
+                        # Если plan_creation_time не имеет информации о часовом поясе, делаем его наивным
+                        if plan_creation_time.tzinfo is not None:
+                            plan_creation_time = plan_creation_time.replace(tzinfo=None)
+                        current_time_naive = current_time.replace(tzinfo=None)
+                        
+                        time_difference = current_time_naive - plan_creation_time
                         days_passed = time_difference.days
                         
                         # Если план был выполнен менее чем за 3 дня, считаем это быстрым выполнением
@@ -264,8 +279,14 @@ class OpenAIService:
             prompt = profile_info + training_summary + instructions
             
             # Получаем текущую дату и последующие даты для тренировок
-            # Генерируем все 7 дат для плана
-            today = datetime.now()
+            import pytz
+            
+            # Генерируем все 7 дат для плана, используя Московское время (UTC+3)
+            # Поскольку сервер работает в UTC, а пользователь, скорее всего, находится в России (UTC+3)
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            today = datetime.now(pytz.UTC).astimezone(moscow_tz)
+            logging.info(f"Текущая дата и время для продолжения плана (Москва): {today.strftime('%d.%m.%Y %H:%M:%S')}")
+            
             dates = []
             for i in range(7):
                 date = today + timedelta(days=i)
@@ -273,6 +294,9 @@ class OpenAIService:
             
             today_str = dates[0]
             tomorrow_str = dates[1]
+            
+            logging.info(f"Сгенерированные даты для продолжения плана: {dates}")
+            logging.info(f"Сегодня: {today_str}, завтра: {tomorrow_str}")
             
             # Вызываем API OpenAI
             response = self.client.chat.completions.create(

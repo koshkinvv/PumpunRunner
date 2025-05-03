@@ -1,6 +1,7 @@
 
 import logging
 from bot_modified import setup_bot
+from app import app  # Импортируем Flask-приложение из app.py
 
 def main():
     """Main function to start the Telegram bot."""
