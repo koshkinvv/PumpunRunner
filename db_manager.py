@@ -178,3 +178,40 @@ class DBManager:
         finally:
             if conn:
                 conn.close()
+    
+    @staticmethod
+    def get_runner_profile(user_id):
+        """
+        Get runner profile for a user.
+        
+        Args:
+            user_id: Database user ID
+            
+        Returns:
+            Dictionary containing runner profile data if found, None otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT * FROM runner_profiles 
+                    WHERE user_id = %s 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                profile = cursor.fetchone()
+                
+                if profile:
+                    return dict(profile)
+                return None
+                
+        except Exception as e:
+            logging.error(f"Error getting runner profile: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()

@@ -1,5 +1,6 @@
 import psycopg2
 import psycopg2.extras
+import json
 from datetime import datetime
 from config import DB_CONFIG, logging
 
@@ -48,6 +49,18 @@ def create_tables():
             weekly_volume FLOAT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Create training_plans table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS training_plans (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            plan_name VARCHAR(255),
+            plan_description TEXT,
+            plan_data JSONB,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
         
