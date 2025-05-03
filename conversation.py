@@ -576,6 +576,8 @@ class RunnerProfileConversation:
                 )
                 return STATES['TRAINING_START_DATE']
         
+        # Переходим к экрану подтверждения данных
+        
         # Display summary of collected information
         profile = context.user_data['profile_data']
         summary = (
