@@ -434,9 +434,21 @@ class RunnerProfileConversation:
         
         context.user_data['profile_data']['fitness_level'] = text
         
+        # Добавляем стандартные варианты объемов бега
+        reply_markup = ReplyKeyboardMarkup(
+            [
+                ['10', '20'],
+                ['30', '40'],
+                ['50', '60'],
+                ['70', '80']
+            ],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
         await update.message.reply_text(
             "Какой у вас текущий еженедельный объем бега в километрах?",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=reply_markup
         )
         return STATES['WEEKLY_VOLUME']
     
@@ -447,8 +459,20 @@ class RunnerProfileConversation:
         try:
             volume = float(text.replace(',', '.'))
             if volume < 0 or volume > 500:
+                # Добавляем кнопки с вариантами объема при ошибке
+                reply_markup = ReplyKeyboardMarkup(
+                    [
+                        ['10', '20'],
+                        ['30', '40'],
+                        ['50', '60'],
+                        ['70', '80']
+                    ],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
                 await update.message.reply_text(
-                    "Пожалуйста, введите корректный еженедельный объем бега от 0 до 500 км."
+                    "Пожалуйста, введите корректный еженедельный объем бега от 0 до 500 км.",
+                    reply_markup=reply_markup
                 )
                 return STATES['WEEKLY_VOLUME']
             
@@ -490,8 +514,20 @@ class RunnerProfileConversation:
             return STATES['CONFIRMATION']
             
         except ValueError:
+            # Добавляем кнопки с вариантами объема при ошибке
+            reply_markup = ReplyKeyboardMarkup(
+                [
+                    ['10', '20'],
+                    ['30', '40'],
+                    ['50', '60'],
+                    ['70', '80']
+                ],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
             await update.message.reply_text(
-                "Пожалуйста, введите корректное числовое значение еженедельного объема бега в километрах."
+                "Пожалуйста, введите корректное числовое значение еженедельного объема бега в километрах.",
+                reply_markup=reply_markup
             )
             return STATES['WEEKLY_VOLUME']
     
