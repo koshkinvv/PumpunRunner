@@ -8,9 +8,13 @@ import os
 import json
 import logging
 import datetime
+import asyncio
 from flask import Flask, request, jsonify, Blueprint
 from telegram import Update
 from bot_modified import setup_bot
+
+# Глобальная переменная для хранения экземпляра бота
+bot = None
 
 # Получаем токен Telegram из переменных окружения
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -31,7 +35,7 @@ logger = logging.getLogger("webhook_server")
 webhook_bp = Blueprint("telegram_webhook", __name__)
 
 @webhook_bp.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
     """Обрабатывает входящие обновления от Telegram."""
     try:
         # Обновляем файл здоровья
@@ -45,8 +49,9 @@ async def webhook():
             # Преобразуем JSON в объект Update
             update = Update.de_json(update_data, bot.bot)
             
-            # Передаем обновление в диспетчер
-            await bot.process_update(update)
+            # Передаем обновление в диспетчер - используем asyncio для запуска асинхронной функции
+            import asyncio
+            asyncio.run(bot.process_update(update))
             return jsonify({"status": "ok"})
         else:
             logger.warning(f"Получен неподдерживаемый content-type: {request.headers.get('content-type')}")
