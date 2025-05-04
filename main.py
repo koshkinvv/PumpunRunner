@@ -140,9 +140,11 @@ def setup_health_update():
         while True:
             try:
                 os.kill(os.getpid(), signal.SIGUSR1)
-            except:
-                pass
-            time.sleep(30)  # Обновляем каждые 30 секунд
+                # Также добавляем прямое обновление файла здоровья для надежности
+                update_health_check()
+            except Exception as e:
+                logging.error(f"Ошибка в процессе обновления здоровья: {e}")
+            time.sleep(60)  # Увеличиваем интервал до 60 секунд для снижения нагрузки
     
     # Запускаем функцию в отдельном потоке
     import threading
@@ -167,21 +169,48 @@ def main():
         # Проверяем и убиваем другие экземпляры бота
         check_and_kill_other_instances()
         
-        max_retries = 5
+        max_retries = 10  # Увеличиваем количество попыток
         retry_count = 0
+        
+        # Логирование версии Python и системной информации
+        logging.info(f"Python version: {sys.version}")
+        
+        # Логирование информации о системной памяти
+        vm = psutil.virtual_memory()
+        logging.info(f"System memory: total={vm.total/(1024*1024):.1f}MB, available={vm.available/(1024*1024):.1f}MB, percent={vm.percent}%")
         
         while retry_count < max_retries:
             try:
+                # Обновляем файл здоровья перед каждой попыткой запуска
+                update_health_check()
+                
                 # Get the bot application
                 application = setup_bot()
                 
                 # Log startup message
                 logging.info("Runner profile bot started successfully!")
                 
+                # Настраиваем обработчики сигналов для корректного завершения
+                def signal_handler(signum, frame):
+                    logging.info(f"Получен сигнал {signum}, завершаем работу бота")
+                    application.stop()
+                
+                # Регистрируем обработчики сигналов
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
+                
                 # Run the bot until the user sends a signal to stop it
-                application.run_polling(drop_pending_updates=True)  # Игнорируем накопившиеся обновления
+                application.run_polling(
+                    drop_pending_updates=True,  # Игнорируем накопившиеся обновления
+                    timeout=30,  # Увеличиваем timeout для долгих соединений
+                    read_timeout=30,
+                    write_timeout=30,
+                    connect_timeout=30,
+                    pool_timeout=30
+                )
                 
                 # Если мы дошли сюда, значит бот завершился нормально
+                logging.info("Бот завершился нормально")
                 break
                 
             except Exception as e:
@@ -189,17 +218,30 @@ def main():
                 logging.error(f"Ошибка в работе бота (попытка {retry_count}/{max_retries}): {e}")
                 logging.error(traceback.format_exc())
                 
+                # Логирование состояния памяти при ошибке
+                try:
+                    process = psutil.Process(os.getpid())
+                    mem_info = process.memory_info()
+                    logging.warning(f"Memory usage: RSS={mem_info.rss/(1024*1024):.1f}MB, VMS={mem_info.vms/(1024*1024):.1f}MB")
+                except Exception as mem_e:
+                    logging.error(f"Не удалось получить информацию о памяти: {mem_e}")
+                
                 # Обновляем файл здоровья перед ожиданием
                 update_health_check()
                 
                 if retry_count < max_retries:
-                    # Ждем перед повторной попыткой, увеличивая время ожидания с каждой попыткой
-                    wait_time = 10 * retry_count
+                    # Используем экспоненциальную задержку для более эффективного восстановления
+                    wait_time = min(60, 5 * (2 ** retry_count))  # Максимум 60 секунд
                     logging.info(f"Перезапуск бота через {wait_time} секунд...")
                     time.sleep(wait_time)
                 else:
                     logging.critical("Превышено максимальное количество попыток перезапуска. Бот остановлен.")
+    except KeyboardInterrupt:
+        logging.info("Бот остановлен пользователем")
     finally:
+        # Завершающее логирование
+        logging.info("Завершение работы бота")
+        
         # Освобождаем блокировку файла перед выходом
         release_lock(lock_file_handle)
 
