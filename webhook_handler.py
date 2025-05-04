@@ -290,16 +290,16 @@ def handle_callback_query(application, update_data):
                 # Массив дней тренировок
                 training_days = plan_data['training_days']
                 
-                # Создаём сообщение о плане тренировок
-                message = f"📅 *Ваш план тренировок:*\n\n"
+                # Отправляем заголовок плана тренировок
+                send_telegram_message(chat_id, f"📅 *Ваш план тренировок:*", parse_mode="Markdown")
                 
                 # Флаг для разделения предстоящих и прошедших тренировок
                 has_upcoming = False
                 has_completed = False
                 
-                # Добавляем информацию о выполненных/отмененных тренировках
-                completed_message = "*Выполненные и отмененные тренировки:*\n\n"
-                upcoming_message = "*Предстоящие тренировки:*\n\n"
+                # Если есть выполненные или отмененные тренировки, отправляем заголовок
+                if any(day_num in completed_days or day_num in canceled_days for day_num in range(1, len(training_days) + 1)):
+                    send_telegram_message(chat_id, "*Выполненные и отмененные тренировки:*", parse_mode="Markdown")
                 
                 # Обрабатываем каждый день тренировки
                 for i, day in enumerate(training_days):
@@ -308,47 +308,45 @@ def handle_callback_query(application, update_data):
                     day_info += f"Тип: {day['training_type']}\n"
                     day_info += f"Дистанция: {day['distance']}\n"
                     day_info += f"Темп: {day['pace']}\n"
-                    day_info += f"Описание: {day['description']}\n\n"
+                    day_info += f"Описание: {day['description']}"
                     
                     # Проверяем, выполнена или отменена ли тренировка
                     if day_num in completed_days:
-                        completed_message += f"✅ {day_info}"
+                        send_telegram_message(chat_id, f"✅ {day_info}", parse_mode="Markdown")
                         has_completed = True
                     elif day_num in canceled_days:
-                        completed_message += f"❌ {day_info}"
+                        send_telegram_message(chat_id, f"❌ {day_info}", parse_mode="Markdown")
                         has_completed = True
                     else:
-                        # Предстоящая тренировка
-                        upcoming_message += f"⏳ {day_info}"
                         has_upcoming = True
                 
-                # Формируем итоговое сообщение
-                if has_completed:
-                    message += completed_message
-                
+                # Если есть предстоящие тренировки, отправляем заголовок и сами тренировки
                 if has_upcoming:
-                    if has_completed:
-                        message += "\n"  # Добавляем разделитель между разделами
-                    message += upcoming_message
+                    send_telegram_message(chat_id, "*Предстоящие тренировки:*", parse_mode="Markdown")
+                    
+                    for i, day in enumerate(training_days):
+                        day_num = i + 1
+                        if day_num not in completed_days and day_num not in canceled_days:
+                            day_info = f"День {day_num}: {day['day']} ({day['date']})\n"
+                            day_info += f"Тип: {day['training_type']}\n"
+                            day_info += f"Дистанция: {day['distance']}\n"
+                            day_info += f"Темп: {day['pace']}\n"
+                            day_info += f"Описание: {day['description']}"
+                            
+                            send_telegram_message(chat_id, f"⏳ {day_info}", parse_mode="Markdown")
                 
                 # Если нет ни выполненных, ни предстоящих тренировок
                 if not has_completed and not has_upcoming:
-                    message += "План тренировок пуст."
+                    send_telegram_message(chat_id, "План тренировок пуст.", parse_mode="Markdown")
                 
-                # Создаём инлайн клавиатуру с кнопками действий
+                # Создаём инлайн клавиатуру с кнопками действий для последнего сообщения
                 keyboard = []
                 
                 # Кнопка для нового плана
                 keyboard.append([InlineKeyboardButton("🔄 Создать новый план", callback_data="new_plan")])
                 
-                # Отправляем сообщение с клавиатурой
-                if 'reply_markup' in callback_query['message']:
-                    # Если это редактирование существующего сообщения
-                    message_id = callback_query['message']['message_id']
-                    edit_message_with_keyboard(chat_id, message_id, message, keyboard, parse_mode="Markdown")
-                else:
-                    # Если это новое сообщение
-                    send_message_with_keyboard(chat_id, message, keyboard, parse_mode="Markdown")
+                # Отправляем последнее сообщение с клавиатурой
+                send_message_with_keyboard(chat_id, "Выберите действие:", keyboard)
             except Exception as e:
                 logger.error(f"Ошибка при отображении плана тренировок: {e}", exc_info=True)
                 send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
