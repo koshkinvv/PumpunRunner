@@ -1309,20 +1309,37 @@ async def callback_query_handler(update, context):
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
+            # Подробное логирование для диагностики
+            logging.info(f"[ADJUST PLAN] Получен callback: {query.data}")
+            logging.info(f"[ADJUST PLAN] Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
+            
+            # Отправляем уведомление пользователю о начале обработки
+            await query.message.reply_text("⏳ Начинаю обработку запроса...")
+            
             # Разбираем callback data: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance}
             parts = query.data.split('_')
+            logging.info(f"[ADJUST PLAN] Разбитые части: {parts}, длина: {len(parts)}")
             
-            # Проверяем, правильный ли формат
-            if len(parts) < 5:  # Исправляем проверку: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance} = 5 частей
-                logging.error(f"Неверный формат callback_data: {query.data}, количество частей: {len(parts)}")
+            # Проверяем, правильный ли формат - должно быть минимум 5 частей
+            if len(parts) < 5:
+                logging.error(f"[ADJUST PLAN] Неверный формат callback_data: {query.data}, количество частей: {len(parts)}")
                 await query.message.reply_text("❌ Неверный формат callback_data для корректировки плана.")
                 return
-            
+                        
             # Извлекаем параметры
             plan_id = int(parts[2])
             day_num = int(parts[3])
             actual_distance = float(parts[4])
-            planned_distance = float(parts[5])
+            
+            # Проверяем наличие параметра planned_distance
+            if len(parts) >= 6:
+                planned_distance = float(parts[5])
+            else:
+                # Если planned_distance отсутствует, используем значение по умолчанию
+                logging.warning(f"[ADJUST PLAN] Отсутствует planned_distance в callback_data, используем значение по умолчанию")
+                planned_distance = 0.0
+            
+            logging.info(f"[ADJUST PLAN] Извлеченные параметры: plan_id={plan_id}, day_num={day_num}, actual_distance={actual_distance}, planned_distance={planned_distance}")
             
             # Получаем профиль бегуна
             runner_profile = DBManager.get_runner_profile(db_user_id)
