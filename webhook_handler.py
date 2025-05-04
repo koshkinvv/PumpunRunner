@@ -428,12 +428,43 @@ def handle_callback_query(application, update_data):
                         message_id = callback_query['message']['message_id']
                         message_text = callback_query['message']['text']
                         
-                        # Убираем символ '⏳' и добавляем '✅'
+                        # Убираем символ '⏳' и добавляем '✅', добавляем слово "ВЫПОЛНЕНО"
                         if message_text.startswith('⏳'):
-                            message_text = '✅' + message_text[1:]
+                            training_title_end = message_text.find('\n')
+                            if training_title_end > 0:
+                                # Добавляем " - ВЫПОЛНЕНО" в конец заголовка
+                                title = message_text[1:training_title_end]
+                                if " - ВЫПОЛНЕНО" not in title:
+                                    title += " - ВЫПОЛНЕНО"
+                                new_text = '✅' + title + message_text[training_title_end:]
+                                message_text = new_text
+                            else:
+                                message_text = '✅' + message_text[1:]
                         
-                        # Отправляем обновленное сообщение без кнопок
-                        send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        # Редактируем существующее сообщение вместо отправки нового
+                        try:
+                            # Редактируем сообщение напрямую через API
+                            import requests
+                            
+                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+                            
+                            data = {
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "text": message_text,
+                                "parse_mode": "Markdown"
+                            }
+                                
+                            response = requests.post(url, json=data)
+                            
+                            if response.status_code != 200:
+                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
+                                # Как запасной вариант отправляем новое сообщение
+                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        except Exception as e:
+                            logger.error(f"Ошибка при редактировании сообщения: {e}")
+                            # Как запасной вариант отправляем новое сообщение
+                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
                     else:
                         answer_callback_query(callback_query_id, "❌ Не удалось отметить тренировку как выполненную.", show_alert=True)
                         
@@ -448,12 +479,43 @@ def handle_callback_query(application, update_data):
                         message_id = callback_query['message']['message_id']
                         message_text = callback_query['message']['text']
                         
-                        # Убираем символ '⏳' и добавляем '❌'
+                        # Убираем символ '⏳' и добавляем '❌', добавляем слово "ОТМЕНЕНО"
                         if message_text.startswith('⏳'):
-                            message_text = '❌' + message_text[1:]
+                            training_title_end = message_text.find('\n')
+                            if training_title_end > 0:
+                                # Добавляем " - ОТМЕНЕНО" в конец заголовка
+                                title = message_text[1:training_title_end]
+                                if " - ОТМЕНЕНО" not in title:
+                                    title += " - ОТМЕНЕНО"
+                                new_text = '❌' + title + message_text[training_title_end:]
+                                message_text = new_text
+                            else:
+                                message_text = '❌' + message_text[1:]
                         
-                        # Отправляем обновленное сообщение без кнопок
-                        send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        # Редактируем существующее сообщение вместо отправки нового
+                        try:
+                            # Редактируем сообщение напрямую через API
+                            import requests
+                            
+                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+                            
+                            data = {
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "text": message_text,
+                                "parse_mode": "Markdown"
+                            }
+                                
+                            response = requests.post(url, json=data)
+                            
+                            if response.status_code != 200:
+                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
+                                # Как запасной вариант отправляем новое сообщение
+                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        except Exception as e:
+                            logger.error(f"Ошибка при редактировании сообщения: {e}")
+                            # Как запасной вариант отправляем новое сообщение
+                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
                         
                         # Предлагаем пользователю скорректировать оставшийся план
                         adjust_button = {
