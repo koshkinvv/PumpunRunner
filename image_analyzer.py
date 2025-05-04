@@ -121,7 +121,10 @@ class ImageAnalyzer:
             Tuple of (matching_day_index, matching_score) or (None, 0) if no match
         """
         if not workout_data or not training_days:
+            logging.warning("Пустые данные тренировки или план тренировок отсутствует")
             return None, 0
+        
+        logging.info(f"Поиск совпадающей тренировки. Данные из скриншота: {workout_data}")
         
         best_match = None
         best_score = 0
@@ -130,18 +133,26 @@ class ImageAnalyzer:
         workout_date = None
         if "formatted_date" in workout_data:
             workout_date = workout_data["formatted_date"]
+            logging.info(f"Дата тренировки из скриншота: {workout_date}")
         
         # Get workout distance
         workout_distance = None
         if "дистанция_км" in workout_data:
             try:
                 workout_distance = float(workout_data["дистанция_км"])
+                logging.info(f"Дистанция тренировки из скриншота: {workout_distance} км")
             except ValueError:
                 logging.warning(f"Could not convert distance to float: {workout_data['дистанция_км']}")
+        
+        # Log all training days for debugging
+        for i, day in enumerate(training_days):
+            training_type = day.get('training_type', day.get('type', 'Не указан'))
+            logging.info(f"План, день {i+1}: {day.get('day', 'Не указан')} ({day.get('date', 'Нет даты')}), тип: {training_type}, дистанция: {day.get('distance', 'Не указана')}")
         
         # Loop through training days to find matches
         for i, day in enumerate(training_days):
             score = 0
+            day_log = f"День {i+1}: {day.get('day', 'Неизвестно')} ({day.get('date', 'Неизвестно')})"
             
             # Extract date from training plan
             training_date = None
@@ -151,6 +162,7 @@ class ImageAnalyzer:
                     date_parts = day["date"].split(".")
                     if len(date_parts) == 3:
                         training_date = f"{date_parts[2]}-{date_parts[1]}-{date_parts[0]}"
+                        day_log += f", дата: {training_date}"
                 except Exception as e:
                     logging.warning(f"Error parsing training date: {e}")
             
@@ -163,12 +175,15 @@ class ImageAnalyzer:
                     distance_match = re.search(r'(\d+(\.\d+)?)', day["distance"])
                     if distance_match:
                         training_distance = float(distance_match.group(1))
+                        day_log += f", дистанция: {training_distance} км"
                 except Exception as e:
                     logging.warning(f"Error parsing training distance: {e}")
             
             # Compare dates (highest priority)
+            date_score = 0
             if workout_date and training_date and workout_date == training_date:
-                score += 10  # High score for exact date match
+                date_score = 10  # High score for exact date match
+                day_log += f", точное совпадение даты (+10)"
             elif workout_date and training_date:
                 # Check if dates are close (within 1 day)
                 try:
@@ -176,33 +191,58 @@ class ImageAnalyzer:
                     training_date_obj = datetime.strptime(training_date, "%Y-%m-%d")
                     days_diff = abs((workout_date_obj - training_date_obj).days)
                     if days_diff <= 1:
-                        score += 5  # Medium score for close dates
+                        date_score = 5  # Medium score for close dates
+                        day_log += f", близкая дата (разница {days_diff} дней) (+5)"
                 except Exception as e:
                     logging.warning(f"Error comparing dates: {e}")
+            score += date_score
             
             # Compare distances (second priority)
+            distance_score = 0
             if workout_distance and training_distance:
                 # Calculate distance difference percentage
-                diff_percent = abs(workout_distance - training_distance) / max(workout_distance, training_distance)
-                if diff_percent <= 0.1:  # Within 10%
-                    score += 3  # High score for similar distance
-                elif diff_percent <= 0.2:  # Within 20%
-                    score += 2  # Medium score for somewhat similar distance
-                elif diff_percent <= 0.3:  # Within 30%
-                    score += 1  # Low score for different but close distance
+                diff_percent = abs(workout_distance - training_distance) / max(workout_distance, training_distance) * 100
+                day_log += f", разница дистанций: {diff_percent:.1f}%"
+                
+                if diff_percent <= 10:  # Within 10%
+                    distance_score = 3  # High score for similar distance
+                    day_log += " (+3)"
+                elif diff_percent <= 20:  # Within 20%
+                    distance_score = 2  # Medium score for somewhat similar distance
+                    day_log += " (+2)"
+                elif diff_percent <= 30:  # Within 30%
+                    distance_score = 1  # Low score for different but close distance
+                    day_log += " (+1)"
+            score += distance_score
             
             # Compare type (lowest priority)
+            type_score = 0
             workout_type = workout_data.get("тип_тренировки", "").lower()
             training_type = day.get("training_type", "").lower()
+            if not training_type:
+                training_type = day.get("type", "").lower()
             
             if workout_type and training_type:
+                day_log += f", типы: '{workout_type}' vs '{training_type}'"
                 if workout_type in training_type or training_type in workout_type:
-                    score += 1  # Small bonus for matching type
+                    type_score = 1  # Small bonus for matching type
+                    day_log += " (+1)"
+            score += type_score
+            
+            # Log the score for this training day
+            day_log += f" = Итого баллов: {score}"
+            logging.info(day_log)
             
             # Update best match if current score is higher
             if score > best_score:
                 best_score = score
                 best_match = i
+                logging.info(f"Новый лучший результат: День {i+1} с {score} баллами")
         
         # Return the best match (index and score)
+        if best_match is not None:
+            logging.info(f"Лучшее совпадение: День {best_match+1} с {best_score} баллами")
+        else:
+            logging.info("Не найдено подходящих совпадений")
+        
         return best_match, best_score

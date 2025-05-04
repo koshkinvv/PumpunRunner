@@ -103,6 +103,48 @@ class TrainingPlanManager:
                 conn.close()
     
     @staticmethod
+    def get_training_plan(user_id, plan_id):
+        """
+        Get a specific training plan by ID.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: ID of the plan to retrieve
+            
+        Returns:
+            Dictionary containing the training plan if found, None otherwise
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Query plan by ID
+                cursor.execute(
+                    """
+                    SELECT id, plan_name, plan_description, plan_data, created_at 
+                    FROM training_plans 
+                    WHERE user_id = %s AND id = %s
+                    """,
+                    (user_id, plan_id)
+                )
+                
+                plan = cursor.fetchone()
+                if plan:
+                    result = dict(plan)
+                    # Parse JSON data only if it's still a string
+                    if isinstance(result["plan_data"], str):
+                        result["plan_data"] = json.loads(result["plan_data"])
+                    return result
+                return None
+                
+        except Exception as e:
+            logging.error(f"Error getting training plan: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
     def get_latest_training_plan(user_id):
         """
         Get the latest training plan for a user.

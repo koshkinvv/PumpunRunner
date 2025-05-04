@@ -1144,8 +1144,19 @@ async def handle_photo(update, context):
         analyzer = ImageAnalyzer()
         workout_data = analyzer.analyze_workout_screenshot(photo_bytes)
         
-        # Log the analysis results
-        logging.info(f"Workout data analysis: {workout_data}")
+        # Log the analysis results in detail
+        logging.info(f"Детальный анализ скриншота тренировки: {workout_data}")
+        
+        # Отдельно логируем важные поля для отладки
+        if "дистанция_км" in workout_data:
+            logging.info(f"Обнаружена дистанция: {workout_data['дистанция_км']} км")
+        else:
+            logging.warning("Дистанция не обнаружена в скриншоте!")
+            
+        if "дата" in workout_data:
+            logging.info(f"Обнаружена дата тренировки: {workout_data['дата']}")
+        else:
+            logging.warning("Дата не обнаружена в скриншоте!")
         
         # Check if analysis was successful
         if 'error' in workout_data:
@@ -1260,14 +1271,24 @@ async def handle_photo(update, context):
                     distance_match = re.search(r'(\d+(\.\d+)?)', matched_day['distance'])
                     if distance_match:
                         planned_distance = float(distance_match.group(1))
+                        logging.info(f"Успешно извлечена плановая дистанция: {planned_distance} км из '{matched_day['distance']}'")
+                    else:
+                        logging.warning(f"Не удалось извлечь числовое значение дистанции из строки: '{matched_day['distance']}'")
                 except Exception as e:
                     logging.warning(f"Error extracting planned distance: {e}")
                 
                 # Check if actual distance significantly differs from planned distance
-                actual_distance = float(workout_distance)
+                try:
+                    actual_distance = float(workout_distance)
+                    logging.info(f"Преобразована фактическая дистанция в число: {actual_distance} км")
+                except ValueError as e:
+                    logging.error(f"Ошибка преобразования фактической дистанции '{workout_distance}' в число: {e}")
+                    actual_distance = 0
+                
                 diff_percent = 0
-                if planned_distance > 0:
+                if planned_distance > 0 and actual_distance > 0:
                     diff_percent = abs(actual_distance - planned_distance) / planned_distance * 100
+                    logging.info(f"Вычислена разница между фактической ({actual_distance} км) и плановой ({planned_distance} км) дистанцией: {diff_percent:.2f}%")
                 
                 # Create the acknowledgment message
                 training_completion_msg = (
@@ -1278,8 +1299,15 @@ async def handle_photo(update, context):
                     f"Фактическая дистанция: {workout_distance} км\n\n"
                 )
                 
+                # Логируем текущее условие для определения ошибки
+                logging.info(f"Проверка условия корректировки плана: diff_percent={diff_percent}, training_days_exists={bool(training_days)}, remaining_days={len(training_days) > matched_day_num}")
+                
                 # If difference is more than 20%
-                if diff_percent > 20 and training_days and len(training_days) > matched_day_num:
+                # Проверяем, что: 
+                # 1) разница больше 20%
+                # 2) есть training_days
+                # 3) не является последним днем плана (если matched_day_num == 7 в плане из 7 дней)
+                if diff_percent > 20 and training_days:
                     # Add a message about the significant difference
                     if actual_distance > planned_distance:
                         training_completion_msg += (

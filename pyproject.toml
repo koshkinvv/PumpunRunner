@@ -15,4 +15,5 @@ dependencies = [
     "pytz>=2025.2",
     "sqlalchemy>=2.0.40",
     "telegram>=0.0.1",
+    "trafilatura>=2.0.0",
 ]
