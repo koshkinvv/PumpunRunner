@@ -44,6 +44,21 @@ class RunnerProfileConversation:
                 "Извините, произошла ошибка при запуске диалога. Пожалуйста, попробуйте позже."
             )
             return ConversationHandler.END
+            
+        # Проверяем, есть ли у пользователя уже профиль
+        existing_profile = DBManager.get_runner_profile(user_id)
+        if existing_profile:
+            # У пользователя уже есть профиль, предлагаем варианты
+            await update.message.reply_text(
+                f"👋 Привет, {user.first_name}! У вас уже есть профиль бегуна.\n\n"
+                "Что вы хотите сделать?",
+                reply_markup=ReplyKeyboardMarkup([
+                    ['👁️ Посмотреть текущий план'],
+                    ['🆕 Создать новый план'],
+                    ['✏️ Обновить мой профиль']
+                ], resize_keyboard=True, one_time_keyboard=True)
+            )
+            return ConversationHandler.END
         
         # Store user_id in context.user_data
         context.user_data['db_user_id'] = user_id

@@ -1011,6 +1011,173 @@ def setup_bot():
     # Add photo handler for analyzing workout screenshots
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     
+    # Add text message handler for button responses
+    async def text_message_handler(update, context):
+        """Обработчик текстовых сообщений от пользователя."""
+        text = update.message.text.strip()
+        user = update.effective_user
+        telegram_id = user.id
+        
+        # Получаем ID пользователя в БД
+        db_user_id = DBManager.get_user_id(telegram_id)
+        
+        if not db_user_id:
+            await update.message.reply_text(
+                "Пожалуйста, используйте команду /start, чтобы начать работу с ботом."
+            )
+            return
+        
+        # Обрабатываем различные текстовые команды от кнопок
+        if text == "👁️ Посмотреть текущий план":
+            # Перенаправляем на обработку команды просмотра плана
+            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            
+            if not plan:
+                await update.message.reply_text(
+                    "У вас еще нет плана тренировок. Создайте его командой /plan"
+                )
+                return
+                
+            # Получаем обработанные тренировки
+            completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan['id'])
+            canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan['id'])
+            
+            # Отправляем план
+            await update.message.reply_text(
+                f"✅ Ваш персонализированный план тренировок:\n\n"
+                f"*{plan['plan_name']}*\n\n"
+                f"{plan['plan_description']}",
+                parse_mode='Markdown'
+            )
+            
+            # Отправляем дни тренировок
+            for idx, day in enumerate(plan['plan_data']['training_days']):
+                training_day_num = idx + 1
+                
+                # Проверяем статус
+                status = ""
+                if training_day_num in completed:
+                    status = "✅ "
+                elif training_day_num in canceled:
+                    status = "❌ "
+                
+                # Создаем сообщение с днем тренировки
+                training_message = (
+                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {day['type']}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                # Добавляем кнопки, если тренировка еще не обработана
+                if training_day_num not in completed and training_day_num not in canceled:
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Отметить как выполненное", 
+                                            callback_data=f"complete_{plan['id']}_{training_day_num}")],
+                        [InlineKeyboardButton("❌ Отменить", 
+                                            callback_data=f"cancel_{plan['id']}_{training_day_num}")]
+                    ])
+                    
+                    await update.message.reply_text(
+                        f"{status}{training_message}",
+                        reply_markup=keyboard,
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"{status}{training_message}",
+                        parse_mode='Markdown'
+                    )
+                
+        elif text == "🆕 Создать новый план":
+            # Отправляем сообщение с котиком
+            with open("attached_assets/котик.jpeg", "rb") as photo:
+                await update.message.reply_photo(
+                    photo=photo,
+                    caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+                )
+            
+            # Генерируем новый план
+            try:
+                # Получаем профиль пользователя
+                profile = DBManager.get_runner_profile(db_user_id)
+                
+                if not profile:
+                    await update.message.reply_text(
+                        "⚠️ У вас еще нет профиля бегуна. Используйте команду /start, чтобы создать его."
+                    )
+                    return
+                
+                # Инициализируем сервис OpenAI
+                openai_service = OpenAIService()
+                
+                # Генерируем план
+                plan = openai_service.generate_training_plan(profile)
+                
+                # Сохраняем план в БД
+                plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+                
+                if not plan_id:
+                    await update.message.reply_text(
+                        "❌ Произошла ошибка при сохранении плана тренировок."
+                    )
+                    return
+                
+                # Получаем сохраненный план
+                saved_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+                
+                # Отправляем план пользователю
+                await update.message.reply_text(
+                    f"✅ Ваш персонализированный план тренировок готов!\n\n"
+                    f"*{saved_plan['plan_name']}*\n\n"
+                    f"{saved_plan['plan_description']}",
+                    parse_mode='Markdown'
+                )
+                
+                # Отправляем дни тренировок
+                for idx, day in enumerate(saved_plan['plan_data']['training_days']):
+                    training_day_num = idx + 1
+                    
+                    # Создаем сообщение с днем тренировки
+                    training_message = (
+                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {day['type']}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    # Добавляем кнопки
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Отметить как выполненное", 
+                                             callback_data=f"complete_{saved_plan['id']}_{training_day_num}")],
+                        [InlineKeyboardButton("❌ Отменить", 
+                                             callback_data=f"cancel_{saved_plan['id']}_{training_day_num}")]
+                    ])
+                    
+                    await update.message.reply_text(
+                        training_message,
+                        reply_markup=keyboard,
+                        parse_mode='Markdown'
+                    )
+                    
+            except Exception as e:
+                logging.error(f"Ошибка генерации плана: {e}")
+                await update.message.reply_text(
+                    "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
+                )
+                
+        elif text == "✏️ Обновить мой профиль":
+            # Начинаем диалог обновления профиля
+            await update.message.reply_text(
+                "Для обновления профиля используйте команду /start. "
+                "Обратите внимание, что это перезапишет ваши текущие данные."
+            )
+    
+    # Регистрируем обработчик текстовых сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
+    
     # Add callback query handler for inline buttons
     application.add_handler(CallbackQueryHandler(callback_query_handler))
     
