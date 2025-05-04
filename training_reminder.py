@@ -44,35 +44,24 @@ class TrainingReminder:
             # Получаем текущую дату в UTC
             utc_now = datetime.datetime.now(pytz.UTC)
             
-            # Получаем всех пользователей из базы данных
-            connection = DBManager.get_connection()
-            cursor = connection.cursor()
+            # Получаем все активные планы тренировок с информацией о пользователях
+            active_plans = TrainingPlanManager.get_active_training_plans()
             
-            # Запрашиваем пользователей с активными планами тренировок
-            cursor.execute("""
-                SELECT u.id, u.telegram_id, u.username, u.first_name, u.last_name
-                FROM users u
-                JOIN training_plans tp ON u.id = tp.user_id
-                WHERE tp.is_active = TRUE
-            """)
-            user_records = cursor.fetchall()
-            
-            for user_record in user_records:
-                user_id, telegram_id, username, first_name, last_name = user_record
+            for plan in active_plans:
+                # Получаем информацию о пользователе из плана
+                user_id = plan['user_id']
+                telegram_id = plan['telegram_id']
+                username = plan['username'] or ''
+                first_name = plan['first_name'] or ''
+                last_name = plan['last_name'] or ''
+                timezone_str = plan['timezone'] or 'Europe/Moscow'
                 
-                # Получаем часовой пояс пользователя (если есть)
-                cursor.execute("SELECT timezone FROM runner_profiles WHERE user_id = %s", (user_id,))
-                tz_record = cursor.fetchone()
-                
-                # Если у пользователя указан часовой пояс, используем его, иначе - по умолчанию
-                user_timezone = None
-                if tz_record and tz_record[0]:
-                    try:
-                        user_timezone = pytz.timezone(tz_record[0])
-                    except pytz.exceptions.UnknownTimeZoneError:
-                        user_timezone = self.default_timezone
-                else:
+                # Определяем часовой пояс пользователя
+                try:
+                    user_timezone = pytz.timezone(timezone_str)
+                except pytz.exceptions.UnknownTimeZoneError:
                     user_timezone = self.default_timezone
+                    logger.warning(f"Неизвестный часовой пояс {timezone_str} для пользователя {user_id}, используем {self.default_timezone.zone}")
                 
                 # Конвертируем текущее время в часовой пояс пользователя
                 local_now = utc_now.astimezone(user_timezone)
@@ -81,14 +70,14 @@ class TrainingReminder:
                 hour = local_now.hour
                 minute = local_now.minute
                 
+                logger.debug(f"Пользователь {user_id}: время {hour}:{minute}, часовой пояс {user_timezone.zone}")
+                
                 if 19 <= hour <= 20 and (hour < 20 or minute <= 10):
                     # Получаем дату завтрашнего дня в формате DD.MM.YYYY
                     tomorrow = (local_now + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
+                    logger.info(f"Ищем тренировки на завтра ({tomorrow}) для пользователя {user_id}")
                     
-                    # Получаем активный план тренировок пользователя
-                    plan = TrainingPlanManager.get_latest_training_plan(user_id)
-                    
-                    if plan and 'plan_data' in plan and 'training_days' in plan['plan_data']:
+                    if 'plan_data' in plan and 'training_days' in plan['plan_data']:
                         # Получаем выполненные и отмененные дни тренировок
                         completed = TrainingPlanManager.get_completed_trainings(user_id, plan['id'])
                         canceled = TrainingPlanManager.get_canceled_trainings(user_id, plan['id'])
@@ -100,24 +89,23 @@ class TrainingReminder:
                             
                             # Проверяем, есть ли тренировка на завтра, которая еще не выполнена и не отменена
                             if day['date'] == tomorrow and day_num not in processed_days:
+                                logger.info(f"Найдена тренировка для пользователя {user_id} на завтра ({tomorrow}): день {day_num}")
+                                
                                 # Добавляем пользователя в список для отправки напоминаний
                                 users.append({
                                     'user_id': user_id,
                                     'telegram_id': telegram_id,
-                                    'username': username or '',
-                                    'first_name': first_name or '',
-                                    'last_name': last_name or '',
+                                    'username': username,
+                                    'first_name': first_name,
+                                    'last_name': last_name,
                                     'training_day': day,
                                     'day_num': day_num,
                                     'plan_id': plan['id']
                                 })
                                 break
             
-            cursor.close()
-            connection.close()
-            
         except Exception as e:
-            logger.error(f"Ошибка при получении пользователей для напоминаний: {e}")
+            logger.error(f"Ошибка при получении пользователей для напоминаний: {e}", exc_info=True)
         
         return users
     

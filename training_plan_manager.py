@@ -456,6 +456,48 @@ class TrainingPlanManager:
                 conn.close()
                 
     @staticmethod
+    def get_active_training_plans():
+        """
+        Get all active training plans for all users.
+        
+        Returns:
+            List of dictionaries containing the active training plans with user IDs
+        """
+        conn = None
+        try:
+            conn = TrainingPlanManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Query all active plans
+                cursor.execute(
+                    """
+                    SELECT tp.id, tp.user_id, tp.plan_name, tp.plan_description, tp.plan_data, tp.created_at,
+                           u.telegram_id, u.username, u.first_name, u.last_name, rp.timezone
+                    FROM training_plans tp
+                    JOIN users u ON tp.user_id = u.id
+                    LEFT JOIN runner_profiles rp ON u.id = rp.user_id
+                    WHERE tp.is_active = TRUE
+                    ORDER BY tp.created_at DESC
+                    """
+                )
+                
+                plans = cursor.fetchall()
+                results = []
+                for plan in plans:
+                    plan_dict = dict(plan)
+                    # Parse JSON data only if it's still a string
+                    if isinstance(plan_dict["plan_data"], str):
+                        plan_dict["plan_data"] = json.loads(plan_dict["plan_data"])
+                    results.append(plan_dict)
+                return results
+                
+        except Exception as e:
+            logging.error(f"Error getting active training plans: {e}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
     def get_all_processed_trainings(user_id, plan_id):
         """
         Get a list of all processed (completed or canceled) training days for a plan.

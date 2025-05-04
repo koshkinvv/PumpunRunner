@@ -1,40 +1,43 @@
 #!/bin/bash
-# Скрипт для настройки cron-задач для мониторинга бота
 
-# Проверяем, установлен ли cron
-if ! command -v crontab &> /dev/null; then
-    echo "cron не установлен!"
-    exit 1
+# Скрипт для настройки регулярного запуска напоминаний через cron
+# После настройки, reminders будет запускаться каждые 15 минут
+# Это позволит всем пользователям получать напоминания в 20:00 по их местному времени
+
+# Определяем пути
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PYTHON_PATH=$(which python3)
+REMINDERS_SCRIPT="$SCRIPT_DIR/run_reminders.py"
+
+# Проверяем наличие скрипта
+if [ ! -f "$REMINDERS_SCRIPT" ]; then
+  echo "Ошибка: Скрипт напоминаний не найден по пути $REMINDERS_SCRIPT"
+  exit 1
 fi
 
-# Полный путь к текущей директории
-CURRENT_DIR=$(pwd)
+# Делаем скрипты исполняемыми
+chmod +x "$REMINDERS_SCRIPT"
 
 # Создаем временный файл для crontab
 TEMP_CRONTAB=$(mktemp)
 
-# Получаем текущий crontab
-crontab -l > $TEMP_CRONTAB 2>/dev/null
+# Экспортируем текущий crontab
+crontab -l > "$TEMP_CRONTAB" 2>/dev/null || echo "" > "$TEMP_CRONTAB"
 
-# Добавляем задачи
-echo "# Автоматический запуск бота при перезагрузке" >> $TEMP_CRONTAB
-echo "@reboot cd $CURRENT_DIR && ./autorun.sh >> logs/cron_autorun.log 2>&1" >> $TEMP_CRONTAB
-echo "" >> $TEMP_CRONTAB
-
-echo "# Проверка состояния бота каждые 30 минут" >> $TEMP_CRONTAB
-echo "*/30 * * * * cd $CURRENT_DIR && python notify_status.py --check >> logs/cron_check.log 2>&1" >> $TEMP_CRONTAB
-echo "" >> $TEMP_CRONTAB
-
-echo "# Отправка регулярных отчетов о состоянии бота (раз в 6 часов)" >> $TEMP_CRONTAB
-echo "0 */6 * * * cd $CURRENT_DIR && python notify_status.py >> logs/cron_report.log 2>&1" >> $TEMP_CRONTAB
-echo "" >> $TEMP_CRONTAB
-
-# Устанавливаем новый crontab
-crontab $TEMP_CRONTAB
+# Проверяем, не добавлено ли уже наше задание
+if ! grep -q "$REMINDERS_SCRIPT" "$TEMP_CRONTAB"; then
+  # Добавляем задание для запуска каждые 15 минут
+  echo "*/15 * * * * cd $SCRIPT_DIR && $PYTHON_PATH $REMINDERS_SCRIPT >> $SCRIPT_DIR/logs/reminders_cron.log 2>&1" >> "$TEMP_CRONTAB"
+  
+  # Устанавливаем новый crontab
+  crontab "$TEMP_CRONTAB"
+  
+  echo "Задание cron успешно добавлено для запуска скрипта напоминаний каждые 15 минут"
+else
+  echo "Задание cron для скрипта напоминаний уже существует"
+fi
 
 # Удаляем временный файл
-rm $TEMP_CRONTAB
+rm "$TEMP_CRONTAB"
 
-echo "Cron-задачи настроены успешно!"
-echo "Проверьте текущие задачи:"
-crontab -l
+echo "Настройка завершена!"
