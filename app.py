@@ -50,9 +50,17 @@ with app.app_context():
     import models  # noqa: F401
     db.create_all()
     
-# Импортируем модуль webhook_server, если существует
+# Импортируем модули для webhook, если существуют
 try:
-    from webhook_server import register_webhook_routes
+    # Используем webhook_handler вместо webhook_server
+    try:
+        from webhook_handler import register_webhook_routes
+        logger.info("Используем webhook_handler для регистрации маршрутов")
+    except ImportError:
+        # Если webhook_handler не найден, пробуем webhook_server
+        from webhook_server import register_webhook_routes
+        logger.info("Используем webhook_server для регистрации маршрутов")
+        
     from bot_modified import setup_bot
     
     # Создаем экземпляр бота
@@ -62,7 +70,7 @@ try:
     register_webhook_routes(app, telegram_bot)
     logger.info("Маршруты webhook успешно зарегистрированы")
 except ImportError:
-    logger.warning("Модуль webhook_server не найден. Webhook не будет настроен.")
+    logger.warning("Модули webhook не найдены. Webhook не будет настроен.")
 except Exception as e:
     logger.error(f"Ошибка при настройке webhook: {e}")
 

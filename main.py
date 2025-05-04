@@ -431,7 +431,8 @@ def main():
                     # В режиме вебхук не запускаем polling, Flask будет принимать обновления
                     logging.info("Запускаем в режиме webhook...")
                     # Предоставляем приложение для обработки обновлений через webhook
-                    from webhook_server import register_webhook_routes, setup_webhook
+                    # Используем новый webhook_handler вместо webhook_server
+                    from webhook_handler import register_webhook_routes, setup_webhook
                     
                     # Импортируем asyncio
                     import asyncio
