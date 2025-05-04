@@ -56,7 +56,19 @@ def webhook():
                 update = Update.de_json(update_data, bot.bot)
                 
                 # Используем синхронный метод для обработки обновления
-                bot.process_update_sync(update)
+                # Проверяем наличие метода process_update_sync
+                if hasattr(bot, 'process_update_sync'):
+                    bot.process_update_sync(update)
+                else:
+                    # Если метод отсутствует, используем asyncio напрямую
+                    import asyncio
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        loop.run_until_complete(bot.process_update(update))
+                        loop.close()
+                    except Exception as e:
+                        logger.error(f"Ошибка при обработке update через asyncio: {e}")
                 
                 # ПРИМЕЧАНИЕ: Мы перешли на синхронную обработку, так как асинхронная
                 # вызывала проблемы с инициализацией Application в отдельных потоках

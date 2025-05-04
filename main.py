@@ -345,6 +345,36 @@ def main():
 
                 # Get the bot application
                 application = setup_bot()
+                
+                # Добавляем метод синхронной обработки для webhook
+                def process_update_sync(update):
+                    """
+                    Синхронная версия process_update для использования в webhook.
+                    
+                    Args:
+                        update: Объект Update для обработки
+                    """
+                    try:
+                        import asyncio
+                        
+                        # Получаем или создаем event loop
+                        try:
+                            loop = asyncio.get_event_loop()
+                        except RuntimeError:
+                            # Если loop не существует в текущем потоке
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                        
+                        # Запускаем обработку в цикле событий
+                        loop.run_until_complete(application.process_update(update))
+                        
+                        return True
+                    except Exception as e:
+                        logging.error(f"Ошибка при синхронной обработке обновления: {e}")
+                        return False
+                
+                # Добавляем метод к экземпляру приложения
+                application.process_update_sync = process_update_sync
 
                 # Log startup message
                 logging.info("Runner profile bot started successfully!")
