@@ -879,6 +879,163 @@ async def callback_query_handler(update, context):
             logging.error(f"Ошибка при показе истории тренировок: {e}")
             await query.message.reply_text("❌ Произошла ошибка при показе истории тренировок.")
     
+    # Обработка ручного сопоставления тренировки со скриншота
+    elif query.data.startswith("manual_match_"):
+        try:
+            # Разбираем callback data: manual_match_{plan_id}_{day_num}_{workout_distance}
+            parts = query.data.split('_')
+            
+            # Проверяем, правильный ли формат
+            if len(parts) < 5:
+                await query.message.reply_text("❌ Неверный формат callback_data для ручного сопоставления.")
+                return
+            
+            # Извлекаем параметры
+            plan_id = int(parts[2])
+            day_num = int(parts[3])
+            workout_distance = float(parts[4])
+            
+            # Получаем текущий план
+            plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+            if not plan:
+                await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
+                return
+            
+            # Проверяем структуру данных плана и выбираем правильное поле для training_days
+            training_days = []
+            if 'training_days' in plan:
+                training_days = plan['training_days']
+            elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                training_days = plan['plan_data']['training_days']
+            
+            # Проверяем, не выходит ли day_num за пределы списка
+            if day_num <= 0 or day_num > len(training_days):
+                await query.message.reply_text("❌ Указан неверный номер дня тренировки.")
+                return
+            
+            # Получаем данные о дне тренировки
+            day_idx = day_num - 1
+            matched_day = training_days[day_idx]
+            
+            # Получаем список обработанных дней
+            completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+            processed_days = completed_days + canceled_days
+            
+            # Проверяем, не обработан ли уже этот день
+            if day_num in processed_days:
+                await query.message.reply_text(
+                    f"⚠️ Тренировка за *{matched_day['date']}* уже отмечена как выполненная или отмененная.",
+                    parse_mode='Markdown'
+                )
+                return
+            
+            # Отмечаем тренировку как выполненную
+            success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, day_num)
+            
+            if success:
+                # Обновляем еженедельный объем в профиле пользователя
+                DBManager.update_weekly_volume(db_user_id, workout_distance)
+                
+                # Извлекаем запланированную дистанцию
+                planned_distance = 0
+                try:
+                    # Извлекаем числовое значение из строки с дистанцией (напр., "5 км" -> 5)
+                    import re
+                    distance_match = re.search(r'(\d+(\.\d+)?)', matched_day['distance'])
+                    if distance_match:
+                        planned_distance = float(distance_match.group(1))
+                        logging.info(f"Успешно извлечена плановая дистанция: {planned_distance} км из '{matched_day['distance']}'")
+                    else:
+                        logging.warning(f"Не удалось извлечь числовое значение дистанции из строки: '{matched_day['distance']}'")
+                except Exception as e:
+                    logging.warning(f"Error extracting planned distance: {e}")
+                
+                # Проверяем, значительно ли отличается фактическая дистанция от запланированной
+                diff_percent = 0
+                if planned_distance > 0 and workout_distance > 0:
+                    diff_percent = abs(workout_distance - planned_distance) / planned_distance * 100
+                    logging.info(f"Вычислена разница между фактической ({workout_distance} км) и плановой ({planned_distance} км) дистанцией: {diff_percent:.2f}%")
+                
+                # Формируем сообщение о сопоставлении
+                training_completion_msg = (
+                    f"✅ *Тренировка успешно сопоставлена с выбранным днем!*\n\n"
+                    f"День {day_num}: {matched_day['day']} ({matched_day['date']})\n"
+                    f"Тип: {matched_day['training_type']}\n"
+                    f"Плановая дистанция: {matched_day['distance']}\n"
+                    f"Фактическая дистанция: {workout_distance} км\n\n"
+                )
+                
+                # Если разница более 20%
+                if diff_percent > 20 and training_days:
+                    # Добавляем сообщение о значительной разнице
+                    if workout_distance > planned_distance:
+                        training_completion_msg += (
+                            f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% больше запланированной!\n"
+                            f"Это может указывать на то, что ваш текущий план недостаточно интенсивен для вас.\n\n"
+                        )
+                    else:
+                        training_completion_msg += (
+                            f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% меньше запланированной!\n"
+                            f"Это может указывать на то, что ваш текущий план слишком интенсивен для вас.\n\n"
+                        )
+                    
+                    # Предлагаем скорректировать план
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📝 Скорректировать план", callback_data=f"adjust_plan_{plan_id}_{day_num}_{workout_distance}_{planned_distance}")]
+                    ])
+                    
+                    training_completion_msg += "Хотите скорректировать оставшиеся тренировки с учетом вашего фактического выполнения?"
+                    
+                    await query.message.edit_text(
+                        training_completion_msg,
+                        parse_mode='Markdown',
+                        reply_markup=keyboard
+                    )
+                else:
+                    # Нет значительной разницы или нет оставшихся дней
+                    training_completion_msg += f"Тренировка отмечена как выполненная! 👍"
+                    
+                    await query.message.edit_text(
+                        training_completion_msg,
+                        parse_mode='Markdown'
+                    )
+                
+                # Проверяем, все ли тренировки теперь выполнены
+                all_processed_days = TrainingPlanManager.get_all_processed_trainings(db_user_id, plan_id)
+                if len(all_processed_days) == len(training_days):
+                    # Вычисляем общую пройденную дистанцию
+                    total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                    
+                    # Создаем кнопку для продолжения тренировок
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Продолжить тренировки", callback_data=f"continue_plan_{plan_id}")]
+                    ])
+                    
+                    await query.message.reply_text(
+                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                        f"Вы пробежали в общей сложности {total_distance:.1f} км.\n\n"
+                        f"Хотите продолжить тренировки с учетом вашего прогресса?",
+                        reply_markup=keyboard
+                    )
+            else:
+                await query.message.edit_text(
+                    "❌ Не удалось отметить тренировку как выполненную. Пожалуйста, попробуйте позже.",
+                    parse_mode='Markdown'
+                )
+        except Exception as e:
+            logging.error(f"Error handling manual match: {e}")
+            await query.message.edit_text(
+                "❌ Произошла ошибка при обработке ручного сопоставления. Пожалуйста, попробуйте позже."
+            )
+    
+    # Обработка кнопки "Это дополнительная тренировка"
+    elif query.data == "extra_training":
+        await query.message.edit_text(
+            "👍 Принято! Эта тренировка засчитана как дополнительная и не связана с текущим планом. "
+            "Продолжайте следовать своему регулярному плану тренировок!"
+        )
+    
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
