@@ -65,6 +65,8 @@ async def help_command(update, context):
         "/plan - Создать или просмотреть план тренировок\n"
         "/pending - Показать только незавершенные тренировки\n"
         "/help - Показать это сообщение с командами\n\n"
+        "📱 Вы также можете отправить мне скриншот из вашего трекера тренировок (Nike Run, Strava, Garmin и др.), "
+        "и я автоматически проанализирую его и зачту вашу тренировку!\n\n"
         "Для начала работы и создания персонализированного плана тренировок, "
         "используйте команду /plan\n\n"
         f"Текущая дата и время (Москва): {moscow_now.strftime('%d.%m.%Y %H:%M:%S')}\n"
@@ -222,11 +224,14 @@ async def generate_plan_command(update, context):
             await update.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
             return
         
-        # Send plan overview
+        # Send plan overview with info about screenshot uploads
         await update.message.reply_text(
             f"✅ Ваш персонализированный план тренировок готов!\n\n"
             f"*{plan['plan_name']}*\n\n"
-            f"{plan['plan_description']}",
+            f"{plan['plan_description']}\n\n"
+            f"📱 Совет: вы можете просто присылать мне скриншоты из вашего трекера тренировок "
+            f"(Nike Run, Strava, Garmin и др.), и я автоматически проанализирую результаты "
+            f"и зачту вашу тренировку!",
             parse_mode='Markdown'
         )
         
@@ -457,7 +462,17 @@ async def callback_query_handler(update, context):
             )
             
             # Отправляем каждый день тренировки с соответствующими кнопками
-            for idx, day in enumerate(plan['plan_data']['training_days']):
+            # Проверяем структуру данных плана и выбираем правильное поле
+            training_days = []
+            if 'training_days' in plan:
+                training_days = plan['training_days']
+            elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                training_days = plan['plan_data']['training_days']
+            
+            logging.info(f"План для пользователя: {db_user_id}, структура: {plan.keys()}")
+            logging.info(f"Найдено дней тренировок: {len(training_days)}")
+            
+            for idx, day in enumerate(training_days):
                 training_day_num = idx + 1
                 
                 # Проверяем, выполнена ли тренировка
@@ -562,10 +577,17 @@ async def callback_query_handler(update, context):
                         recalculated_distance = 0
                         for day_num in completed_training_days:
                             day_idx = day_num - 1
-                            if day_idx < 0 or day_idx >= len(current_plan['plan_data']['training_days']):
+                            # Определяем правильную структуру плана
+                            training_days = []
+                            if 'training_days' in current_plan:
+                                training_days = current_plan['training_days']
+                            elif 'plan_data' in current_plan and isinstance(current_plan['plan_data'], dict) and 'training_days' in current_plan['plan_data']:
+                                training_days = current_plan['plan_data']['training_days']
+                            
+                            if day_idx < 0 or day_idx >= len(training_days):
                                 continue
                             
-                            day_data = current_plan['plan_data']['training_days'][day_idx]
+                            day_data = training_days[day_idx]
                             distance_str = day_data.get('distance', '0 км').split()[0]
                             try:
                                 distance = float(distance_str)
@@ -592,7 +614,13 @@ async def callback_query_handler(update, context):
                 
                 # Получаем сервис OpenAI и генерируем продолжение плана
                 openai_service = OpenAIService()
-                plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
+                
+                # Определяем правильную структуру данных для плана
+                plan_data_for_api = current_plan
+                if 'plan_data' in current_plan and isinstance(current_plan['plan_data'], dict):
+                    plan_data_for_api = current_plan['plan_data']
+                
+                plan = openai_service.generate_training_plan_continuation(profile, total_distance, plan_data_for_api)
             
             # Сохраняем план в базу данных
             plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -1097,9 +1125,12 @@ def setup_bot():
                     status = "❌ "
                 
                 # Создаем сообщение с днем тренировки
+                # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
+                training_type = day.get('training_type') or day.get('type', 'Не указан')
+                
                 training_message = (
                     f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {day['type']}\n"
+                    f"Тип: {training_type}\n"
                     f"Дистанция: {day['distance']}\n"
                     f"Темп: {day['pace']}\n\n"
                     f"{day['description']}"
@@ -1171,13 +1202,27 @@ def setup_bot():
                 )
                 
                 # Отправляем дни тренировок
-                for idx, day in enumerate(saved_plan['plan_data']['training_days']):
+                # Определяем структуру плана
+                training_days = []
+                if 'training_days' in saved_plan:
+                    training_days = saved_plan['training_days']
+                elif 'plan_data' in saved_plan and isinstance(saved_plan['plan_data'], dict) and 'training_days' in saved_plan['plan_data']:
+                    training_days = saved_plan['plan_data']['training_days']
+                else:
+                    logging.error(f"Неверная структура плана: {saved_plan.keys()}")
+                    await update.message.reply_text("❌ Ошибка в структуре плана тренировок.")
+                    return
+                
+                for idx, day in enumerate(training_days):
                     training_day_num = idx + 1
                     
                     # Создаем сообщение с днем тренировки
+                    # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
+                    training_type = day.get('training_type') or day.get('type', 'Не указан')
+                    
                     training_message = (
                         f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {day['type']}\n"
+                        f"Тип: {training_type}\n"
                         f"Дистанция: {day['distance']}\n"
                         f"Темп: {day['pace']}\n\n"
                         f"{day['description']}"
