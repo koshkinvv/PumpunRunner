@@ -8,8 +8,12 @@ import psutil
 import fcntl
 import datetime
 import threading
+from dotenv import load_dotenv
 from bot_modified import setup_bot
 from app import app  # Импортируем Flask-приложение из app.py
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
 
 # Константы для мониторинга здоровья
 HEALTH_CHECK_FILE = "bot_health.txt"
@@ -389,14 +393,31 @@ def main():
                 except Exception as e:
                     logging.warning(f"Не удалось установить таймаут для бота: {e}")
 
-                # Запускаем бота с наиболее универсальными параметрами
-                application.run_polling(
-                    drop_pending_updates=True,  # Игнорируем накопившиеся обновления
-                    allowed_updates=None,  # Принимаем все типы обновлений
-                    close_loop=False,  # Не закрываем цикл событий после остановки
-                    stop_signals=(signal.SIGINT, signal.SIGTERM),  # Сигналы для остановки
-                    timeout=60  # Увеличиваем timeout для долгих соединений до 60 секунд
-                )
+                # Запускаем бота в режиме polling (всегда, так как Flask уже запущен)
+                # В будущем мы настроим вебхук с помощью отдельного скрипта
+                webhook_mode = os.environ.get("USE_WEBHOOK", "false").lower() == "true"
+                
+                if webhook_mode:
+                    # В режиме вебхук не запускаем polling, Flask будет принимать обновления
+                    logging.info("Запускаем в режиме webhook...")
+                    # Предоставляем приложение для обработки обновлений через webhook
+                    from webhook_server import register_webhook_routes
+                    register_webhook_routes(app, application)
+                    logging.info("Webhook маршруты успешно зарегистрированы")
+                    # В этом режиме мы просто держим приложение работающим, без активного поллинга
+                    import asyncio
+                    # Бесконечный цикл для поддержания жизни приложения
+                    asyncio.get_event_loop().run_forever()
+                else:
+                    # Стандартный режим поллинга
+                    logging.info("Запускаем поллинг...")
+                    application.run_polling(
+                        drop_pending_updates=True,  # Игнорируем накопившиеся обновления
+                        allowed_updates=None,  # Принимаем все типы обновлений
+                        close_loop=False,  # Не закрываем цикл событий после остановки
+                        stop_signals=(signal.SIGINT, signal.SIGTERM),  # Сигналы для остановки
+                        timeout=60  # Увеличиваем timeout для долгих соединений до 60 секунд
+                    )
 
                 # Если мы дошли сюда, значит бот завершился нормально
                 logging.info("Бот завершился нормально")

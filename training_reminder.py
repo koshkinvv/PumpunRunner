@@ -88,7 +88,7 @@ class TrainingReminder:
                             day_num = idx + 1
                             
                             # Проверяем, есть ли тренировка на завтра, которая еще не выполнена и не отменена
-                            if day['date'] == tomorrow and day_num not in processed_days:
+                            if 'date' in day and day['date'] == tomorrow and day_num not in processed_days:
                                 logger.info(f"Найдена тренировка для пользователя {user_id} на завтра ({tomorrow}): день {day_num}")
                                 
                                 # Добавляем пользователя в список для отправки напоминаний
@@ -123,14 +123,33 @@ class TrainingReminder:
             plan_id = user_info['plan_id']
             
             # Формируем сообщение с напоминанием
+            day = training.get('day', 'Тренировка')
+            date = training.get('date', '')
+            training_type = training.get('training_type', 'Бег')
+            distance = training.get('distance', '')
+            pace = training.get('pace', '')
+            description = training.get('description', 'Следуйте своему плану тренировок')
+            
             message = (
                 f"🔔 *Напоминание о завтрашней тренировке!*\n\n"
                 f"Завтра у вас запланирована тренировка:\n\n"
-                f"*День {day_num}: {training['day']} ({training['date']})*\n"
-                f"Тип: {training['training_type']}\n"
-                f"Дистанция: {training['distance']}\n"
-                f"Темп: {training['pace']}\n\n"
-                f"{training['description']}\n\n"
+                f"*День {day_num}: {day}"
+            )
+            
+            if date:
+                message += f" ({date})"
+            
+            message += f"*\n"
+            message += f"Тип: {training_type}\n"
+            
+            if distance:
+                message += f"Дистанция: {distance}\n"
+            
+            if pace:
+                message += f"Темп: {pace}\n"
+                
+            message += f"\n{description}\n\n"
+            message += (
                 f"Подготовьтесь заранее и не забудьте отметить тренировку как выполненную после завершения! "
                 f"Также вы можете загрузить скриншот из вашего трекера тренировок для автоматической отметки."
             )
@@ -142,7 +161,7 @@ class TrainingReminder:
                 parse_mode='Markdown'
             )
             
-            logger.info(f"Отправлено напоминание пользователю {telegram_id} о тренировке на {training['date']}")
+            logger.info(f"Отправлено напоминание пользователю {telegram_id} о тренировке на {date or 'завтра'}")
             
         except TelegramError as e:
             logger.error(f"Ошибка Telegram при отправке напоминания пользователю {user_info['telegram_id']}: {e}")

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
-Веб-приложение для мониторинга состояния бота и просмотра статистики.
+Веб-приложение для мониторинга состояния бота и обработки webhook от Telegram.
+Включает функционал мониторинга и healthcheck для предотвращения "засыпания" Replit VM.
 """
 
 import os
@@ -10,7 +11,7 @@ import time
 import logging
 import datetime
 import psutil
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request, Blueprint
 from sqlalchemy.orm import DeclarativeBase
 from flask_sqlalchemy import SQLAlchemy
 
@@ -48,6 +49,17 @@ db.init_app(app)
 with app.app_context():
     import models  # noqa: F401
     db.create_all()
+    
+# Импортируем модуль webhook_server, если существует
+try:
+    from webhook_server import register_webhook_routes
+    # Регистрируем маршруты webhook
+    register_webhook_routes(app)
+    logger.info("Маршруты webhook успешно зарегистрированы")
+except ImportError:
+    logger.warning("Модуль webhook_server не найден. Webhook не будет настроен.")
+except Exception as e:
+    logger.error(f"Ошибка при настройке webhook: {e}")
 
 # Путь к файлу здоровья бота
 HEALTH_FILE = "bot_health.txt"

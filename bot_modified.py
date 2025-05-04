@@ -408,6 +408,28 @@ async def callback_query_handler(update, context):
                 # Проверка, все ли тренировки выполнены или отменены
                 has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
                 
+                # Предлагаем скорректировать план, если это не последняя тренировка
+                if has_pending_trainings:
+                    # Получаем профиль бегуна для возможной корректировки плана
+                    runner_profile = DBManager.get_runner_profile(db_user_id)
+                    if runner_profile:
+                        # Создаем кнопки для корректировки плана или продолжения без изменений
+                        # Используем новый формат: adjust_after_cancel_ID_DAY
+                        adjust_callback = f"adjust_{plan_id}_{day_number}"  # Исправлено: используем более короткий формат для совместимости
+                        logging.info(f"Создаем кнопку с callback_data: {adjust_callback}")
+                        
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📋 Скорректировать план", callback_data=adjust_callback)],
+                            [InlineKeyboardButton("✅ Продолжить без изменений", callback_data="no_adjustment")]
+                        ])
+                        
+                        # Отправляем сообщение с предложением скорректировать план
+                        await query.message.reply_text(
+                            f"❓ Хотите скорректировать оставшиеся тренировки после отмены тренировки дня {day_number}?\n\n"
+                            f"Это поможет перераспределить нагрузку и сохранить баланс в вашем тренировочном плане.",
+                            reply_markup=keyboard
+                        )
+                    
                 # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
                 if not has_pending_trainings:
                     # Расчет общего пройденного расстояния
@@ -1107,6 +1129,182 @@ async def callback_query_handler(update, context):
         await query.message.edit_text(
             "✅ Обновление профиля отменено. Ваш текущий профиль остается без изменений."
         )
+        
+    # Обработка кнопки "adjust" - корректировка плана после отмены (новая версия)
+    elif query.data.startswith('adjust_'):
+        try:
+            # Предварительная проверка на случай, если это adjust_plan_
+            if query.data.startswith('adjust_plan_'):
+                # Это будет обработано в другом обработчике
+                return
+                
+            # Предварительная проверка на случай, если это adjust_after_cancel_
+            if query.data.startswith('adjust_after_cancel_'):
+                # Это будет обработано в другом обработчике
+                return
+            
+            # Получаем полный callback_data для отладки
+            callback_data = query.data
+            logging.info(f"Callback data для корректировки плана: {callback_data}")
+            
+            # Разбиваем callback_data на части
+            parts = callback_data.split('_')
+            logging.info(f"Разбитые части callback_data: {parts}")
+            
+            # Получаем ID плана и номер дня из callback_data
+            if len(parts) >= 3:  # формат: adjust_ID_DAY
+                plan_id = int(parts[1])
+                day_number = int(parts[2])
+                logging.info(f"Извлеченные данные: plan_id={plan_id}, day_number={day_number}")
+            else:
+                await query.message.reply_text("❌ Некорректный формат данных обратного вызова.")
+                return
+                
+            # Получаем план тренировок
+            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            if not plan:
+                await query.message.reply_text("❌ Не удалось найти план тренировок.")
+                return
+                
+            # Получаем профиль бегуна
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            if not runner_profile:
+                await query.message.reply_text("❌ Не удалось найти профиль бегуна.")
+                return
+                
+            # Отправляем сообщение о начале корректировки
+            processing_message = await query.message.reply_text(
+                "⏳ Разрабатываем скорректированный план тренировок...\n"
+                "Это может занять некоторое время, пожалуйста, подождите."
+            )
+            
+            # Корректируем план с помощью OpenAI
+            openai_service = OpenAIService()
+            adjusted_plan = openai_service.adjust_plan_after_cancellation(
+                runner_profile, 
+                plan['plan_data'], 
+                day_number
+            )
+            
+            if not adjusted_plan:
+                await processing_message.edit_text("❌ Не удалось скорректировать план тренировок.")
+                return
+                
+            # Обновляем план в базе данных
+            success = TrainingPlanManager.update_training_plan(
+                db_user_id, 
+                plan_id, 
+                adjusted_plan
+            )
+            
+            if success:
+                await processing_message.edit_text(
+                    "✅ План тренировок успешно скорректирован!\n\n"
+                    "Оставшиеся тренировки были адаптированы с учетом отмененной тренировки."
+                )
+                
+                # Отправляем обновленный план
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👁 Посмотреть обновленный план", callback_data="view_plan")]
+                ])
+                
+                await query.message.reply_text(
+                    "📋 Ваш план тренировок был скорректирован. Вы можете посмотреть обновленные тренировки:",
+                    reply_markup=keyboard
+                )
+            else:
+                await processing_message.edit_text("❌ Не удалось обновить план тренировок в базе данных.")
+                
+        except Exception as e:
+            logging.error(f"Error adjusting plan after cancellation (new format): {e}")
+            await query.message.reply_text("❌ Произошла ошибка при корректировке плана тренировок.")
+                
+    # Обработка кнопки "adjust_after_cancel" - корректировка плана после отмены (старая версия, оставлена для обратной совместимости)
+    elif query.data.startswith('adjust_after_cancel_'):
+        try:
+            # Получаем полный callback_data для отладки
+            callback_data = query.data
+            logging.info(f"Callback data для корректировки плана (устаревший формат): {callback_data}")
+            
+            # Разбиваем callback_data на части
+            parts = callback_data.split('_')
+            logging.info(f"Разбитые части callback_data: {parts}")
+            
+            # Получаем ID плана и номер дня из callback_data
+            if len(parts) >= 5:  # формат: adjust_after_cancel_ID_DAY
+                plan_id = int(parts[3])  # переиндексировали с 2 на 3
+                day_number = int(parts[4])  # переиндексировали с 3 на 4
+                logging.info(f"Извлеченные данные: plan_id={plan_id}, day_number={day_number}")
+            else:
+                await query.message.reply_text("❌ Некорректный формат данных обратного вызова.")
+                return
+            
+            # Получаем план тренировок
+            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            if not plan:
+                await query.message.reply_text("❌ Не удалось найти план тренировок.")
+                return
+                
+            # Получаем профиль бегуна
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            if not runner_profile:
+                await query.message.reply_text("❌ Не удалось найти профиль бегуна.")
+                return
+                
+            # Отправляем сообщение о начале корректировки
+            processing_message = await query.message.reply_text(
+                "⏳ Разрабатываем скорректированный план тренировок...\n"
+                "Это может занять некоторое время, пожалуйста, подождите."
+            )
+            
+            # Корректируем план с помощью OpenAI
+            openai_service = OpenAIService()
+            adjusted_plan = openai_service.adjust_plan_after_cancellation(
+                runner_profile, 
+                plan['plan_data'], 
+                day_number
+            )
+            
+            if not adjusted_plan:
+                await processing_message.edit_text("❌ Не удалось скорректировать план тренировок.")
+                return
+                
+            # Обновляем план в базе данных
+            success = TrainingPlanManager.update_training_plan(
+                db_user_id, 
+                plan_id, 
+                adjusted_plan
+            )
+            
+            if success:
+                await processing_message.edit_text(
+                    "✅ План тренировок успешно скорректирован!\n\n"
+                    "Оставшиеся тренировки были адаптированы с учетом отмененной тренировки."
+                )
+                
+                # Отправляем обновленный план
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👁 Посмотреть обновленный план", callback_data="view_plan")]
+                ])
+                
+                await query.message.reply_text(
+                    "📋 Ваш план тренировок был скорректирован. Вы можете посмотреть обновленные тренировки:",
+                    reply_markup=keyboard
+                )
+            else:
+                await processing_message.edit_text("❌ Не удалось обновить план тренировок в базе данных.")
+                
+        except Exception as e:
+            logging.error(f"Error adjusting plan after cancellation: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при корректировке плана тренировок.")
+            
+    # Обработка кнопки "no_adjustment" - продолжить без корректировки
+    elif query.data == "no_adjustment":
+        try:
+            await query.message.reply_text("✅ Вы решили продолжить без корректировки плана.")
+        except Exception as e:
+            logging.error(f"Error handling no_adjustment: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
     
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):

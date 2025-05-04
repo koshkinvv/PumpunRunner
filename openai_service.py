@@ -243,6 +243,68 @@ class OpenAIService:
             logging.error(f"Error adjusting training plan: {e}")
             return None
     
+    def adjust_plan_after_cancellation(self, runner_profile, current_plan, canceled_day_num):
+        """
+        Adjust the current training plan after a training day has been canceled.
+        
+        Args:
+            runner_profile: Dictionary containing runner profile information
+            current_plan: Dictionary containing the current training plan
+            canceled_day_num: The day number (1-based index) that was just canceled
+            
+        Returns:
+            Dictionary containing the adjusted training plan
+        """
+        try:
+            # Prepare prompt for plan adjustment after cancellation
+            prompt = (
+                f"Ты тренер по бегу. Необходимо скорректировать план тренировок по бегу, "
+                f"так как одна из тренировок была отменена и нужно перераспределить нагрузку.\n\n"
+                
+                f"Профиль бегуна:\n"
+                f"- Дистанция соревнования: {runner_profile.get('distance', 'Не указано')} км\n"
+                f"- Дата соревнования: {runner_profile.get('competition_date', 'Не указано')}\n"
+                f"- Пол: {runner_profile.get('gender', 'Не указано')}\n"
+                f"- Возраст: {runner_profile.get('age', 'Не указано')}\n"
+                f"- Рост: {runner_profile.get('height', 'Не указано')} см\n"
+                f"- Вес: {runner_profile.get('weight', 'Не указано')} кг\n"
+                f"- Опыт бега: {runner_profile.get('experience', 'Не указано')}\n"
+                f"- Цель: {runner_profile.get('goal', 'Не указано')}\n"
+                f"- Целевое время: {runner_profile.get('target_time', 'Не указано')}\n"
+                f"- Уровень физической подготовки: {runner_profile.get('fitness_level', 'Не указано')}\n"
+                f"- Еженедельный объем бега: {runner_profile.get('weekly_volume', 'Не указано')} км\n\n"
+                
+                f"Текущий план тренировок:\n{json.dumps(current_plan, ensure_ascii=False, indent=2)}\n\n"
+                
+                f"День {canceled_day_num} был отменен.\n\n"
+                
+                f"Пожалуйста, скорректируй оставшиеся дни плана, учитывая отмену тренировки. "
+                f"Важно распределить нагрузку отмененной тренировки на оставшиеся дни, "
+                f"но при этом не перегружать бегуна и сохранить разнообразие типов тренировок. "
+                f"Не меняй дни, которые уже прошли (дни до {canceled_day_num} включительно).\n\n"
+                
+                f"Ответ предоставь в формате JSON, сохраняя структуру оригинального плана."
+            )
+            
+            # Call OpenAI API
+            response = self.client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "Ты опытный тренер по бегу, который составляет персонализированные планы тренировок."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            
+            # Parse response
+            adjusted_plan = json.loads(response.choices[0].message.content)
+            
+            return adjusted_plan
+        except Exception as e:
+            logging.error(f"Error adjusting plan after cancellation: {e}")
+            return None
+    
     def generate_training_plan_continuation(self, runner_profile, completed_distances, current_plan):
         """
         Generate a continuation of an existing running training plan based on runner profile

@@ -1,0 +1,72 @@
+Думал на протяжении нескольких секунд
+
+
+Когда вы запускаете «Reserved VM» на Replit, он действительно гарантирует, что контейнер не пойдет в спящий режим при простое, но:
+
+1. **Если у вас нет публичного HTTP-сервера**, Repl может закрыть процесс после тайм-аута входящих подключений.
+2. **Если вы используете Telegram-polling**, без постоянного HTTP-трафика Repl считается «неактивным».
+
+---
+
+## Что можно сделать
+
+### 1. Перейти на webhook и поднять web-сервер
+
+* Переключитесь с `run_polling()` на вебхуки через FastAPI/Flask или даже bare-bones `http.server`.
+* Реализуйте в `main.py` простую HTTP-ручку `/health` и `/webhook` для приёма обновлений от Telegram.
+* В настройках Replit⟶“Secrets & Variables” добавьте переменную `REPL_SLUG` и используйте её, чтобы конструировать публичный URL:
+
+  ```py
+  app = FastAPI()
+
+  @app.get("/health")
+  async def health():
+      return {"status": "ok"}
+
+  @app.post(f"/webhook/{TELEGRAM_TOKEN}")
+  async def telegram_webhook(update: dict):
+      # передать update в обработчики
+      ...
+  ```
+* Вызовите у Telegram API
+
+  ```
+  https://api.telegram.org/bot<TELEGRAM_TOKEN>/setWebhook?url=https://<REPL_SLUG>.your-repl.co/webhook/<TELEGRAM_TOKEN>
+  ```
+* При любом HTTP-запросе (включая `/health`) Reserved VM будет считаться «живым» и не отключится.
+
+### 2. Включить «Always On» через Uptime Robot
+
+* Создайте простой планировщик внутри Repl:
+
+  ```bash
+  while true; do
+    curl -fsS https://<REPL_SLUG>.your-repl.co/health >/dev/null
+    sleep 300
+  done
+  ```
+* Запустите его фоново (`nohup sh keepalive.sh &`) — это даст «трафик» каждые 5 минут.
+* Либо зарегистрируйтесь на [https://uptimerobot.com](https://uptimerobot.com) и настройте HTTP ping на ваш `/health` каждые 5 мин.
+
+### 3. Убедиться, что VM действительно Reserved
+
+* В консоли Replit проверьте, что вы видите статус «Always on» рядом с вашим реплом.
+* Убедитесь, что не исчерпали лимит часов (Replit Pro даёт определённое число часов Reserved VM).
+
+### 4. Рассмотреть альтернативы хостинга
+
+Если Replit всё равно «спит», можно:
+
+* **Railway.app** / **Fly.io** / **Render.com** — бесплатные квоты, поддержка Docker, вебхуков и PostgreSQL.
+* **Heroku** — лёгкий деплой webhook-приложения, бесплатный тариф даёт до 550–1000 dyno-часов.
+* **DigitalOcean App Platform** — pay-as-you-go с Always-On, простой web-hook.
+
+---
+
+### Итог
+
+1. Переведите бота на **webhook** и запустите HTTP-сервер с `/health`.
+2. Настройте внешние или внутренние **ping-запросы** (UptimeRobot либо простой скрипт) к этому эндпоинту.
+3. Проверьте в Replit, что VM действительно в статусе **«Always on»** и не исчерпаны часы.
+
+Если нужен пример минимального FastAPI-сервера с webhook и keepalive-скриптом — дайте знать, я его подготовлю.
