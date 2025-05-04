@@ -9,6 +9,8 @@ import json
 import logging
 import asyncio
 import datetime
+import threading
+import requests
 from flask import Blueprint, request, jsonify
 from config import TELEGRAM_TOKEN, logging
 
@@ -28,40 +30,64 @@ webhook_bp = Blueprint("webhook_handler", __name__)
 def webhook():
     """Обрабатывает входящие обновления от Telegram."""
     try:
-        # Проверяем, что бот инициализирован
-        if bot is None:
-            logger.error("Бот не инициализирован. Возможно, register_webhook_routes не был вызван с экземпляром бота.")
-            return jsonify({"status": "error", "message": "Бот не инициализирован"}), 500
-            
-        # Обновляем файл здоровья
+        # Обновляем файл здоровья в любом случае
         update_health_check()
         
         # Получаем данные обновления от Telegram
         if request.headers.get("content-type") == "application/json":
             update_data = request.get_json()
-            logger.debug(f"Получено обновление: {update_data}")
+            update_id = update_data.get("update_id", "unknown")
+            logger.info(f"Получено обновление {update_id}")
             
-            # Вместо использования функций telegram-python-bot,
-            # мы просто передаем raw данные в наш собственный handler
-            # через очередь в background thread
+            # Даже если бот не инициализирован, мы можем попытаться обработать простые сообщения
             try:
-                # Запускаем обработку в отдельном потоке
-                import threading
-                thread = threading.Thread(target=lambda: handle_update_in_background(bot, update_data))
-                thread.daemon = True
-                thread.start()
+                # Проверяем, что бот инициализирован
+                if bot is None:
+                    logger.warning("Бот не инициализирован, используем резервную обработку.")
+                    
+                    # Обработка сообщений без бота (резервный вариант)
+                    if 'message' in update_data and 'chat' in update_data['message']:
+                        chat_id = update_data['message']['chat']['id']
+                        if 'text' in update_data['message']:
+                            text = update_data['message']['text']
+                            if text.startswith('/'):
+                                # Обработка команд
+                                if text == '/start' or text == '/help':
+                                    send_telegram_message(chat_id, 
+                                        "👋 Привет! Бот сейчас перезагружается. "
+                                        "Пожалуйста, попробуйте через несколько минут."
+                                    )
+                                else:
+                                    send_telegram_message(chat_id, 
+                                        "⏳ Бот временно недоступен из-за технических работ. "
+                                        "Попробуйте позже."
+                                    )
+                            else:
+                                send_telegram_message(chat_id, 
+                                    "⏳ Бот временно недоступен из-за технических работ. "
+                                    "Попробуйте позже."
+                                )
+                else:
+                    # Используем экземпляр бота для обработки обновления
+                    import threading
+                    thread = threading.Thread(target=lambda: handle_update_in_background(bot, update_data))
+                    thread.daemon = True
+                    thread.start()
+                    logger.info(f"Обновление {update_id} отправлено на обработку в фоновом режиме")
                 
-                # Сразу возвращаем успешный ответ Telegram
+                # Всегда возвращаем 200, чтобы Telegram не отправлял повторно
                 return jsonify({"status": "ok"})
             except Exception as e:
-                logger.error(f"Ошибка при обработке сообщения: {e}")
-                return jsonify({"status": "error", "message": f"Ошибка обработки сообщения: {str(e)}"}), 500
+                logger.error(f"Ошибка при обработке обновления: {e}", exc_info=True)
+                # Возвращаем 200 OK, чтобы Telegram не пытался повторить доставку
+                return jsonify({"status": "ok", "message": f"Ошибка: {str(e)}"}), 200
         else:
             logger.warning(f"Получен неподдерживаемый content-type: {request.headers.get('content-type')}")
-            return jsonify({"status": "error", "message": "Content-type должен быть application/json"}), 400
+            return jsonify({"status": "ok", "message": "Неверный формат данных"}), 200
     except Exception as e:
-        logger.error(f"Ошибка при обработке webhook-обновления: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"Критическая ошибка при обработке webhook: {e}", exc_info=True)
+        # Всегда возвращаем 200 OK для Telegram, чтобы избежать повторных отправок
+        return jsonify({"status": "ok", "message": f"Критическая ошибка: {str(e)}"}), 200
 
 def handle_update_in_background(application, update_data):
     """
@@ -72,9 +98,8 @@ def handle_update_in_background(application, update_data):
         update_data: Словарь с данными обновления от Telegram API
     """
     try:
-        # Импортируем здесь, чтобы избежать циклических импортов
-        from telegram import Update
-
+        logger.info(f"Получено обновление: {json.dumps(update_data, ensure_ascii=False)[:200]}...")
+        
         # Проверяем тип обновления и обрабатываем соответствующим образом
         if 'message' in update_data:
             handle_message(application, update_data)
