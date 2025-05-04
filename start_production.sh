@@ -3,6 +3,9 @@
 
 echo "Запуск бота в продакшен-режиме..."
 
+# Устанавливаем переменную окружения для режима webhook
+export USE_WEBHOOK=true
+
 # Обновляем настройки webhook
 echo "Обновление настроек webhook..."
 ./refresh_webhook.sh

@@ -38,6 +38,11 @@ webhook_bp = Blueprint("telegram_webhook", __name__)
 def webhook():
     """Обрабатывает входящие обновления от Telegram."""
     try:
+        # Проверяем, что бот инициализирован
+        if bot is None:
+            logger.error("Бот не инициализирован. Возможно, register_webhook_routes не был вызван с экземпляром бота.")
+            return jsonify({"status": "error", "message": "Бот не инициализирован"}), 500
+            
         # Обновляем файл здоровья
         update_health_check()
         

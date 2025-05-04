@@ -401,13 +401,29 @@ def main():
                     # В режиме вебхук не запускаем polling, Flask будет принимать обновления
                     logging.info("Запускаем в режиме webhook...")
                     # Предоставляем приложение для обработки обновлений через webhook
-                    from webhook_server import register_webhook_routes
+                    from webhook_server import register_webhook_routes, setup_webhook
+                    
+                    # Импортируем asyncio
+                    import asyncio
+                    
+                    # Инициализируем приложение для работы через webhook
+                    async def init_application():
+                        await application.initialize()
+                        await setup_webhook(application)
+                    
+                    # Запускаем асинхронную инициализацию
+                    asyncio.run(init_application())
+                    
+                    # Регистрируем маршруты webhook
                     register_webhook_routes(app, application)
                     logging.info("Webhook маршруты успешно зарегистрированы")
-                    # В этом режиме мы просто держим приложение работающим, без активного поллинга
-                    import asyncio
-                    # Бесконечный цикл для поддержания жизни приложения
-                    asyncio.get_event_loop().run_forever()
+                    
+                    # В этом режиме мы просто ожидаем без бесконечного цикла
+                    # Бот будет работать через webhook, обрабатываемый Flask
+                    while True:
+                        # Просто обновляем файл здоровья каждые 60 секунд
+                        update_health_check()
+                        time.sleep(60)
                 else:
                     # Стандартный режим поллинга
                     logging.info("Запускаем поллинг...")

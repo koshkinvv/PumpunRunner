@@ -53,8 +53,13 @@ with app.app_context():
 # Импортируем модуль webhook_server, если существует
 try:
     from webhook_server import register_webhook_routes
-    # Регистрируем маршруты webhook
-    register_webhook_routes(app)
+    from bot_modified import setup_bot
+    
+    # Создаем экземпляр бота
+    telegram_bot = setup_bot()
+    
+    # Регистрируем маршруты webhook с передачей экземпляра бота
+    register_webhook_routes(app, telegram_bot)
     logger.info("Маршруты webhook успешно зарегистрированы")
 except ImportError:
     logger.warning("Модуль webhook_server не найден. Webhook не будет настроен.")
