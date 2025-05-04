@@ -217,7 +217,18 @@ def handle_callback_query(application, update_data):
             # Импортируем необходимые модули
             from db_manager import DBManager
             from training_plan_manager import TrainingPlanManager
-            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            # Создаем класс для кнопки
+            class InlineKeyboardButton:
+                def __init__(self, text, callback_data):
+                    self.text = text
+                    self.callback_data = callback_data
+                
+                def to_dict(self):
+                    return {
+                        "text": self.text,
+                        "callback_data": self.callback_data
+                    }
             
             try:
                 # Получаем user_id из telegram_id
@@ -294,14 +305,13 @@ def handle_callback_query(application, update_data):
                 keyboard.append([InlineKeyboardButton("🔄 Создать новый план", callback_data="new_plan")])
                 
                 # Отправляем сообщение с клавиатурой
-                from telegram_utils import send_message_with_keyboard
                 if 'reply_markup' in callback_query['message']:
                     # Если это редактирование существующего сообщения
                     message_id = callback_query['message']['message_id']
-                    edit_message_with_keyboard(chat_id, message_id, message, keyboard)
+                    edit_message_with_keyboard(chat_id, message_id, message, keyboard, parse_mode="Markdown")
                 else:
                     # Если это новое сообщение
-                    send_message_with_keyboard(chat_id, message, keyboard)
+                    send_message_with_keyboard(chat_id, message, keyboard, parse_mode="Markdown")
             except Exception as e:
                 logger.error(f"Ошибка при отображении плана тренировок: {e}", exc_info=True)
                 send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
@@ -388,9 +398,17 @@ def send_message_with_keyboard(chat_id, text, keyboard, parse_mode=None):
         
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         
+        # Преобразуем кнопки в формат, ожидаемый Telegram API
+        formatted_keyboard = []
+        for row in keyboard:
+            formatted_row = []
+            for button in row:
+                formatted_row.append(button.to_dict())
+            formatted_keyboard.append(formatted_row)
+        
         # Создаем клавиатуру в формате, ожидаемом Telegram API
         reply_markup = {
-            "inline_keyboard": keyboard
+            "inline_keyboard": formatted_keyboard
         }
         
         data = {
@@ -426,9 +444,17 @@ def edit_message_with_keyboard(chat_id, message_id, text, keyboard, parse_mode=N
         
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
         
+        # Преобразуем кнопки в формат, ожидаемый Telegram API
+        formatted_keyboard = []
+        for row in keyboard:
+            formatted_row = []
+            for button in row:
+                formatted_row.append(button.to_dict())
+            formatted_keyboard.append(formatted_row)
+        
         # Создаем клавиатуру в формате, ожидаемом Telegram API
         reply_markup = {
-            "inline_keyboard": keyboard
+            "inline_keyboard": formatted_keyboard
         }
         
         data = {
