@@ -1218,8 +1218,56 @@ async def handle_photo(update, context):
                 )
             return
         
-        # Find a matching training day
-        matching_day_idx, matching_score = analyzer.find_matching_training(training_days, workout_data)
+        # Получаем данные даты из скриншота для правильного сопоставления
+        workout_date_str = workout_data.get("дата", "")
+        # Преобразуем дату "DD.MM.YYYY" в объект datetime для сравнения
+        workout_date_obj = None
+        if workout_date_str:
+            try:
+                # Пробуем стандартный российский формат
+                workout_date_obj = datetime.strptime(workout_date_str, "%d.%m.%Y")
+                logging.info(f"Получена дата тренировки из скриншота: {workout_date_obj.strftime('%Y-%m-%d')}")
+            except ValueError:
+                # Пробуем другие форматы (например, американский "April 27, 2025")
+                try:
+                    # Извлекаем дату из строки в формате "4/27/25 - 11:17 AM"
+                    import re
+                    date_match = re.search(r'(\d+)/(\d+)/(\d+)', workout_date_str)
+                    if date_match:
+                        month, day, year = map(int, date_match.groups())
+                        # Предполагаем, что это 20xx год
+                        if year < 100:
+                            year += 2000
+                        workout_date_obj = datetime(year, month, day)
+                        logging.info(f"Получена дата тренировки из скриншота (альтернативный формат): {workout_date_obj.strftime('%Y-%m-%d')}")
+                except Exception as e:
+                    logging.warning(f"Не удалось распознать дату из '{workout_date_str}': {e}")
+        
+        # Устанавливаем принудительное сопоставление с днем из плана по дате, если дата есть и соответствует одному из дней плана
+        forced_match_idx = None
+        if workout_date_obj:
+            for i, day in enumerate(training_days):
+                day_date_str = day.get('date', '')
+                try:
+                    # Преобразуем дату из плана "DD.MM.YYYY" в объект datetime
+                    day_date_obj = datetime.strptime(day_date_str, "%d.%m.%Y")
+                    
+                    # Если даты совпадают, устанавливаем принудительное сопоставление
+                    if day_date_obj.date() == workout_date_obj.date():
+                        forced_match_idx = i
+                        logging.info(f"Принудительное сопоставление по дате: День {i+1} ({day_date_str})")
+                        break
+                except ValueError:
+                    logging.warning(f"Не удалось преобразовать дату '{day_date_str}' из плана.")
+        
+        # Если есть принудительное сопоставление по дате, используем его, иначе используем алгоритм
+        if forced_match_idx is not None:
+            matching_day_idx = forced_match_idx
+            matching_score = 10  # Высокий балл для сопоставления по дате
+            logging.info(f"Используется принудительное сопоставление по дате: День {matching_day_idx+1}")
+        else:
+            # Используем стандартный алгоритм сопоставления, если не удалось сопоставить по дате
+            matching_day_idx, matching_score = analyzer.find_matching_training(training_days, workout_data)
         
         # Extract workout details for display
         workout_date = workout_data.get("дата", "Неизвестно")
