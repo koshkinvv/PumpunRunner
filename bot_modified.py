@@ -1313,7 +1313,8 @@ async def callback_query_handler(update, context):
             parts = query.data.split('_')
             
             # Проверяем, правильный ли формат
-            if len(parts) < 6:
+            if len(parts) < 5:  # Исправляем проверку: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance} = 5 частей
+                logging.error(f"Неверный формат callback_data: {query.data}, количество частей: {len(parts)}")
                 await query.message.reply_text("❌ Неверный формат callback_data для корректировки плана.")
                 return
             
