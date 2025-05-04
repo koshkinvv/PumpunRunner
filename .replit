@@ -9,7 +9,7 @@ deploymentTarget = "gce"
 run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app"]
 
 [workflows]
-runButton = "Web and Bot"
+runButton = "Web Server"
 
 [[workflows.workflow]]
 name = "Project"
@@ -43,6 +43,19 @@ args = "python main.py"
 
 [[workflows.workflow]]
 name = "Web and Bot"
+author = 41797496
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"
+
+[[workflows.workflow]]
+name = "Web Server"
 author = 41797496
 mode = "parallel"
 
