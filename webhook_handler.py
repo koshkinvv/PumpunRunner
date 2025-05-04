@@ -11,6 +11,7 @@ import asyncio
 import datetime
 import threading
 import requests
+import uuid
 from flask import Blueprint, request, jsonify
 from config import TELEGRAM_TOKEN, logging
 
@@ -130,9 +131,20 @@ def handle_message(application, update_data):
             if text.startswith('/'):
                 handle_command(application, chat_id, text)
             else:
-                # Обычное текстовое сообщение
-                send_telegram_message(chat_id, "Я получил ваше сообщение и обрабатываю его.")
-                logger.info(f"Получено текстовое сообщение: {text}")
+                # Обработка специальных текстовых сообщений
+                if text == "👁️ Посмотреть текущий план":
+                    # Эмулируем callback query для просмотра плана
+                    fake_callback_query = {
+                        'id': f"fake_{uuid.uuid4()}",
+                        'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                        'data': 'view_plan'
+                    }
+                    handle_callback_query(application, {'callback_query': fake_callback_query})
+                    logger.info(f"Обработано сообщение 'Посмотреть текущий план' от пользователя {chat_id}")
+                else:
+                    # Обычное текстовое сообщение
+                    send_telegram_message(chat_id, "Я получил ваше сообщение и обрабатываю его.")
+                    logger.info(f"Получено текстовое сообщение: {text}")
                 
         # Проверяем, содержит ли сообщение фото
         elif 'photo' in message:
