@@ -187,19 +187,84 @@ def handle_command(application, chat_id, command_text):
                 "и я автоматически проанализирую его и зачту вашу тренировку!"
             )
         elif command == '/plan':
-            # Для сложных команд лучше запускать оригинальный обработчик через application
-            # Но пока отправим простое сообщение
-            send_telegram_message(chat_id, 
-                "⏳ Эта команда запускает сложный процесс создания плана. "
-                "Сейчас мы работаем над улучшением обработки webhook. "
-                "Пожалуйста, попробуйте позже."
-            )
+            # Создаем фейковый callback_query для кнопки "Посмотреть текущий план"
+            fake_callback_query = {
+                'id': str(uuid.uuid4()),
+                'from': {'id': chat_id, 'first_name': 'User'},
+                'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                'data': 'view_plan'
+            }
+            handle_callback_query(application, {'callback_query': fake_callback_query})
         elif command == '/pending':
-            send_telegram_message(chat_id, 
-                "⏳ Эта команда показывает незавершенные тренировки. "
-                "Сейчас мы работаем над улучшением обработки webhook. "
-                "Пожалуйста, попробуйте позже."
-            )
+            # Получаем telegram_id из chat_id
+            telegram_id = chat_id
+            
+            # Получаем ID пользователя из базы данных
+            db_user_id = DBManager.get_user_id(telegram_id)
+            
+            if not db_user_id:
+                send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                return
+            
+            # Получаем текущий план тренировок пользователя
+            current_plan = TrainingPlanManager.get_current_training_plan(db_user_id)
+            
+            if not current_plan:
+                send_telegram_message(chat_id, "У вас пока нет плана тренировок. Используйте команду /plan для создания.")
+                return
+            
+            plan_id = current_plan['id']
+            plan_data = current_plan['plan_data']
+            
+            if not plan_data or 'training_days' not in plan_data:
+                send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
+                return
+            
+            # Получаем выполненные и отмененные тренировки
+            completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+            
+            # Массив дней тренировок
+            training_days = plan_data['training_days']
+            
+            # Проверяем, есть ли незавершенные тренировки
+            has_pending = False
+            
+            # Отправляем заголовок только незавершенных тренировок
+            send_telegram_message(chat_id, "📅 *Незавершенные тренировки:*", parse_mode="Markdown")
+            
+            # Обрабатываем каждый день тренировки
+            for i, day in enumerate(training_days):
+                day_num = i + 1
+                # Пропускаем выполненные и отмененные тренировки
+                if day_num in completed_days or day_num in canceled_days:
+                    continue
+                    
+                has_pending = True
+                day_info = f"День {day_num}: {day['day']} ({day['date']})\n"
+                day_info += f"Тип: {day['training_type']}\n"
+                day_info += f"Дистанция: {day['distance']}\n"
+                day_info += f"Темп: {day['pace']}\n"
+                day_info += f"Описание: {day['description']}"
+                
+                # Создаем кнопки действий для этой тренировки
+                complete_button = {
+                    "text": "✅ Выполнено",
+                    "callback_data": f"complete_training_{plan_id}_{day_num}"
+                }
+                cancel_button = {
+                    "text": "❌ Отменить",
+                    "callback_data": f"cancel_training_{plan_id}_{day_num}"
+                }
+                
+                # Создаем клавиатуру в формате Telegram API
+                training_keyboard = [[complete_button, cancel_button]]
+                
+                # Отправляем сообщение с тренировкой и кнопками
+                send_message_with_keyboard(chat_id, f"⏳ {day_info}", training_keyboard, parse_mode="Markdown")
+            
+            if not has_pending:
+                send_telegram_message(chat_id, "У вас нет незавершенных тренировок. Все тренировки выполнены или отменены!", parse_mode="Markdown")
         else:
             send_telegram_message(chat_id, 
                 f"Извините, команда {command} не распознана. "
@@ -226,10 +291,12 @@ def handle_callback_query(application, update_data):
         answer_callback_query(callback_query['id'])
         
         # Обрабатываем различные callback_data
-        if callback_data.startswith('complete_'):
-            send_telegram_message(chat_id, "Тренировка отмечена как выполненная!")
-        elif callback_data.startswith('cancel_'):
-            send_telegram_message(chat_id, "Тренировка отменена!")
+        if callback_data.startswith('complete_training_'):
+            # Это уже обрабатывается в следующей секции, пропускаем здесь
+            pass
+        elif callback_data.startswith('cancel_training_'):
+            # Это уже обрабатывается в следующей секции, пропускаем здесь
+            pass
         elif callback_data == 'view_plan':
             # Получаем telegram_id из chat_id
             telegram_id = chat_id
@@ -396,6 +463,8 @@ def handle_callback_query(application, update_data):
                 day_num = int(parts[3])
                 
                 # Получаем ID пользователя из базы данных
+                # user_id берем из chat_id для webhook
+                user_id = chat_id
                 db_user_id = DBManager.get_user_id(user_id)
                 
                 if not db_user_id:
