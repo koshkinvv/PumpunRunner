@@ -15,6 +15,14 @@ import uuid
 from flask import Blueprint, request, jsonify
 from config import TELEGRAM_TOKEN, logging
 
+# Импортируем необходимые модули для управления БД и планами тренировок
+try:
+    from db_manager import DBManager
+    from training_plan_manager import TrainingPlanManager
+except ImportError:
+    logger = logging.getLogger("webhook_handler")
+    logger.error("Не удалось импортировать DBManager или TrainingPlanManager. Некоторая функциональность может быть недоступна.")
+
 # Настройка логирования
 logger = logging.getLogger("webhook_handler")
 
@@ -334,12 +342,18 @@ def handle_callback_query(application, update_data):
                             day_info += f"Описание: {day['description']}"
                             
                             # Создаем кнопки действий для этой тренировки
-                            training_keyboard = [
-                                [
-                                    InlineKeyboardButton("✅ Выполнено", callback_data=f"complete_training_{plan_id}_{day_num}"),
-                                    InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_training_{plan_id}_{day_num}")
-                                ]
-                            ]
+                            # Создаем словари для кнопок
+                            complete_button = {
+                                "text": "✅ Выполнено",
+                                "callback_data": f"complete_training_{plan_id}_{day_num}"
+                            }
+                            cancel_button = {
+                                "text": "❌ Отменить",
+                                "callback_data": f"cancel_training_{plan_id}_{day_num}"
+                            }
+                            
+                            # Создаем клавиатуру в формате Telegram API
+                            training_keyboard = [[complete_button, cancel_button]]
                             
                             # Отправляем сообщение с тренировкой и кнопками
                             send_message_with_keyboard(chat_id, f"⏳ {day_info}", training_keyboard, parse_mode="Markdown")
@@ -352,7 +366,11 @@ def handle_callback_query(application, update_data):
                 keyboard = []
                 
                 # Кнопка для нового плана
-                keyboard.append([InlineKeyboardButton("🔄 Создать новый план", callback_data="new_plan")])
+                new_plan_button = {
+                    "text": "🔄 Создать новый план",
+                    "callback_data": "new_plan"
+                }
+                keyboard.append([new_plan_button])
                 
                 # Отправляем последнее сообщение с клавиатурой
                 send_message_with_keyboard(chat_id, "Выберите действие:", keyboard)
@@ -438,10 +456,15 @@ def handle_callback_query(application, update_data):
                         send_telegram_message(chat_id, message_text, parse_mode="Markdown")
                         
                         # Предлагаем пользователю скорректировать оставшийся план
-                        keyboard = [
-                            [InlineKeyboardButton("✅ Да, скорректировать", callback_data=f"adjust_plan_{plan_id}_{day_num}")],
-                            [InlineKeyboardButton("❌ Нет, оставить как есть", callback_data="no_adjust")]
-                        ]
+                        adjust_button = {
+                            "text": "✅ Да, скорректировать",
+                            "callback_data": f"adjust_plan_{plan_id}_{day_num}"
+                        }
+                        no_adjust_button = {
+                            "text": "❌ Нет, оставить как есть",
+                            "callback_data": "no_adjust"
+                        }
+                        keyboard = [[adjust_button], [no_adjust_button]]
                         
                         send_message_with_keyboard(
                             chat_id, 
@@ -534,17 +557,9 @@ def send_message_with_keyboard(chat_id, text, keyboard, parse_mode=None):
         
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         
-        # Преобразуем кнопки в формат, ожидаемый Telegram API
-        formatted_keyboard = []
-        for row in keyboard:
-            formatted_row = []
-            for button in row:
-                formatted_row.append(button.to_dict())
-            formatted_keyboard.append(formatted_row)
-        
-        # Создаем клавиатуру в формате, ожидаемом Telegram API
+        # Кнопки уже в формате Telegram API, просто создаем reply_markup
         reply_markup = {
-            "inline_keyboard": formatted_keyboard
+            "inline_keyboard": keyboard
         }
         
         data = {
@@ -580,17 +595,9 @@ def edit_message_with_keyboard(chat_id, message_id, text, keyboard, parse_mode=N
         
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
         
-        # Преобразуем кнопки в формат, ожидаемый Telegram API
-        formatted_keyboard = []
-        for row in keyboard:
-            formatted_row = []
-            for button in row:
-                formatted_row.append(button.to_dict())
-            formatted_keyboard.append(formatted_row)
-        
-        # Создаем клавиатуру в формате, ожидаемом Telegram API
+        # Кнопки уже в формате Telegram API, просто создаем reply_markup
         reply_markup = {
-            "inline_keyboard": formatted_keyboard
+            "inline_keyboard": keyboard
         }
         
         data = {
@@ -607,8 +614,12 @@ def edit_message_with_keyboard(chat_id, message_id, text, keyboard, parse_mode=N
         
         if response.status_code != 200:
             logger.error(f"Ошибка при редактировании сообщения с клавиатурой: {response.text}")
+            # Если не удалось отредактировать сообщение, отправляем новое
+            send_message_with_keyboard(chat_id, text, keyboard, parse_mode)
     except Exception as e:
         logger.error(f"Ошибка при редактировании сообщения с клавиатурой: {e}", exc_info=True)
+        # В случае ошибки отправляем новое сообщение
+        send_message_with_keyboard(chat_id, text, keyboard, parse_mode)
 
 @webhook_bp.route("/health", methods=["GET"])
 def health():
