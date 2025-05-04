@@ -43,6 +43,7 @@ def create_tables():
             fitness_level VARCHAR(50),
             weekly_volume FLOAT,
             training_start_date VARCHAR(50),
+            timezone VARCHAR(50) DEFAULT 'Europe/Moscow',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

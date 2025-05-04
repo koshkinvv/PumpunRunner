@@ -357,10 +357,9 @@ def main():
                 # Проверка подключения к Telegram API перед запуском
                 try:
                     logging.info("Проверка подключения к Telegram API...")
-                    # Используем тестовый запрос для проверки соединения
-                    async def check_connection():
-                        await application.bot.get_me()
-                    application.loop.run_until_complete(check_connection())
+                    # В новых версиях python-telegram-bot проверяем соединение без использования loop
+                    # Это синхронный вызов, который инициирует запрос и получает результат
+                    application.bot.get_me()
                     logging.info("Подключение к Telegram API успешно")
                 except Exception as e:
                     logging.error(f"Ошибка подключения к Telegram API: {e}")

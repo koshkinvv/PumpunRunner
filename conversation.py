@@ -1,4 +1,5 @@
 import re
+import pytz
 from datetime import datetime
 
 # Импорты из python-telegram-bot
@@ -785,6 +786,7 @@ class RunnerProfileConversation:
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
+                STATES['TIMEZONE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_timezone)],
                 STATES['CONFIRMATION']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_data)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)],
