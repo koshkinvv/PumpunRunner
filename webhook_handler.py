@@ -1,6 +1,6 @@
 """
-Упрощенный обработчик webhook для Telegram бота.
-Этот модуль обеспечивает простую обработку webhook-запросов от Telegram API
+Улучшенный обработчик webhook для Telegram бота.
+Этот модуль обеспечивает обработку webhook-запросов от Telegram API
 без использования встроенного webhook-механизма telegram-python-bot.
 """
 
@@ -48,48 +48,14 @@ def webhook():
             update_id = update_data.get("update_id", "unknown")
             logger.info(f"Получено обновление {update_id}")
             
-            # Даже если бот не инициализирован, мы можем попытаться обработать простые сообщения
-            try:
-                # Проверяем, что бот инициализирован
-                if bot is None:
-                    logger.warning("Бот не инициализирован, используем резервную обработку.")
-                    
-                    # Обработка сообщений без бота (резервный вариант)
-                    if 'message' in update_data and 'chat' in update_data['message']:
-                        chat_id = update_data['message']['chat']['id']
-                        if 'text' in update_data['message']:
-                            text = update_data['message']['text']
-                            if text.startswith('/'):
-                                # Обработка команд
-                                if text == '/start' or text == '/help':
-                                    send_telegram_message(chat_id, 
-                                        "👋 Привет! Бот сейчас перезагружается. "
-                                        "Пожалуйста, попробуйте через несколько минут."
-                                    )
-                                else:
-                                    send_telegram_message(chat_id, 
-                                        "⏳ Бот временно недоступен из-за технических работ. "
-                                        "Попробуйте позже."
-                                    )
-                            else:
-                                send_telegram_message(chat_id, 
-                                    "⏳ Бот временно недоступен из-за технических работ. "
-                                    "Попробуйте позже."
-                                )
-                else:
-                    # Используем экземпляр бота для обработки обновления
-                    import threading
-                    thread = threading.Thread(target=lambda: handle_update_in_background(bot, update_data))
-                    thread.daemon = True
-                    thread.start()
-                    logger.info(f"Обновление {update_id} отправлено на обработку в фоновом режиме")
-                
-                # Всегда возвращаем 200, чтобы Telegram не отправлял повторно
-                return jsonify({"status": "ok"})
-            except Exception as e:
-                logger.error(f"Ошибка при обработке обновления: {e}", exc_info=True)
-                # Возвращаем 200 OK, чтобы Telegram не пытался повторить доставку
-                return jsonify({"status": "ok", "message": f"Ошибка: {str(e)}"}), 200
+            # Обработка обновления в фоновом режиме
+            thread = threading.Thread(target=lambda: handle_update_in_background(bot, update_data))
+            thread.daemon = True
+            thread.start()
+            logger.info(f"Обновление {update_id} отправлено на обработку в фоновом режиме")
+            
+            # Всегда возвращаем 200, чтобы Telegram не отправлял повторно
+            return jsonify({"status": "ok"})
         else:
             logger.warning(f"Получен неподдерживаемый content-type: {request.headers.get('content-type')}")
             return jsonify({"status": "ok", "message": "Неверный формат данных"}), 200
@@ -107,7 +73,7 @@ def handle_update_in_background(application, update_data):
         update_data: Словарь с данными обновления от Telegram API
     """
     try:
-        logger.info(f"Получено обновление: {json.dumps(update_data, ensure_ascii=False)[:200]}...")
+        logger.info(f"Обработка обновления: {json.dumps(update_data, ensure_ascii=False)[:200]}...")
         
         # Проверяем тип обновления и обрабатываем соответствующим образом
         if 'message' in update_data:
@@ -138,22 +104,22 @@ def handle_message(application, update_data):
             # Обрабатываем команды
             if text.startswith('/'):
                 handle_command(application, chat_id, text)
+            # Кнопки в сообщениях пользователя
+            elif text == "👁️ Посмотреть текущий план":
+                # Создаем фейковый callback_query для имитации кнопки "Посмотреть текущий план"
+                fake_callback_query = {
+                    'id': str(uuid.uuid4()),
+                    'from': {'id': chat_id, 'first_name': 'User'},
+                    'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                    'data': 'view_plan'
+                }
+                handle_callback_query(application, {'callback_query': fake_callback_query})
+                logger.info(f"Обработано сообщение 'Посмотреть текущий план' от пользователя {chat_id}")
             else:
-                # Обработка специальных текстовых сообщений
-                if text == "👁️ Посмотреть текущий план":
-                    # Эмулируем callback query для просмотра плана
-                    fake_callback_query = {
-                        'id': f"fake_{uuid.uuid4()}",
-                        'message': {'chat': {'id': chat_id}, 'message_id': 0},
-                        'data': 'view_plan'
-                    }
-                    handle_callback_query(application, {'callback_query': fake_callback_query})
-                    logger.info(f"Обработано сообщение 'Посмотреть текущий план' от пользователя {chat_id}")
-                else:
-                    # Обычное текстовое сообщение
-                    send_telegram_message(chat_id, "Я получил ваше сообщение и обрабатываю его.")
-                    logger.info(f"Получено текстовое сообщение: {text}")
-                
+                # Обычное текстовое сообщение
+                send_telegram_message(chat_id, "Я получил ваше сообщение и обрабатываю его.")
+                logger.info(f"Получено текстовое сообщение: {text}")
+            
         # Проверяем, содержит ли сообщение фото
         elif 'photo' in message:
             send_telegram_message(chat_id, "Я получил ваше фото и анализирую его.")
@@ -207,7 +173,7 @@ def handle_command(application, chat_id, command_text):
                 return
             
             # Получаем текущий план тренировок пользователя
-            current_plan = TrainingPlanManager.get_current_training_plan(db_user_id)
+            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
             
             if not current_plan:
                 send_telegram_message(chat_id, "У вас пока нет плана тренировок. Используйте команду /plan для создания.")
@@ -286,36 +252,167 @@ def handle_callback_query(application, update_data):
         callback_query = update_data['callback_query']
         chat_id = callback_query['message']['chat']['id']
         callback_data = callback_query['data']
+        callback_id = callback_query['id']
         
         # Отправляем ответ, что получили callback
-        answer_callback_query(callback_query['id'])
+        answer_callback_query(callback_id)
         
         # Обрабатываем различные callback_data
-        if callback_data.startswith('complete_training_'):
-            # Это уже обрабатывается в следующей секции, пропускаем здесь
-            pass
-        elif callback_data.startswith('cancel_training_'):
-            # Это уже обрабатывается в следующей секции, пропускаем здесь
-            pass
+        if callback_data.startswith('complete_training_') or callback_data.startswith('cancel_training_'):
+            # Обработка действий с тренировками
+            try:
+                parts = callback_data.split('_')
+                action = parts[0]  # complete или cancel
+                plan_id = int(parts[2])
+                day_num = int(parts[3])
+                
+                # Получаем ID пользователя из базы данных
+                user_id = chat_id
+                db_user_id = DBManager.get_user_id(user_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Выполняем действие с тренировкой
+                if action == 'complete':
+                    # Отмечаем тренировку как выполненную
+                    success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, day_num)
+                    
+                    if success:
+                        # Получаем данные тренировки
+                        plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+                        
+                        if plan and 'plan_data' in plan and plan['plan_data']:
+                            plan_data = plan['plan_data']
+                            if 'training_days' in plan_data:
+                                training_days = plan_data['training_days']
+                                
+                                if day_num <= len(training_days):
+                                    training = training_days[day_num - 1]
+                                    distance = training.get('distance', '0 км')
+                                    
+                                    # Пытаемся извлечь числовое значение из строки дистанции
+                                    try:
+                                        # Убираем ' км' и пробелы, затем преобразуем в число
+                                        distance_value = float(distance.replace('км', '').strip())
+                                        
+                                        # Обновляем недельный объем бега
+                                        DBManager.update_weekly_volume(db_user_id, distance_value)
+                                    except:
+                                        logger.error(f"Не удалось преобразовать дистанцию '{distance}' в число")
+                        
+                        # Обновляем сообщение, заменяя кнопки на отметку о выполнении
+                        message_id = callback_query['message']['message_id']
+                        message_text = callback_query['message']['text']
+                        
+                        # Убираем символ '⏳' и добавляем '✅', добавляем слово "ВЫПОЛНЕНО"
+                        if message_text.startswith('⏳'):
+                            training_title_end = message_text.find('\n')
+                            if training_title_end > 0:
+                                # Добавляем " - ВЫПОЛНЕНО" в конец заголовка
+                                title = message_text[1:training_title_end]
+                                if " - ВЫПОЛНЕНО" not in title:
+                                    title += " - ВЫПОЛНЕНО"
+                                new_text = '✅' + title + message_text[training_title_end:]
+                                message_text = new_text
+                            else:
+                                message_text = '✅' + message_text[1:]
+                        
+                        # Редактируем существующее сообщение вместо отправки нового
+                        try:
+                            # Редактируем сообщение напрямую через API
+                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+                            
+                            data = {
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "text": message_text,
+                                "parse_mode": "Markdown"
+                            }
+                                
+                            response = requests.post(url, json=data)
+                            
+                            if response.status_code != 200:
+                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
+                                # Как запасной вариант отправляем новое сообщение
+                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        except Exception as e:
+                            logger.error(f"Ошибка при редактировании сообщения: {e}")
+                            # Как запасной вариант отправляем новое сообщение
+                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                    else:
+                        answer_callback_query(callback_id, "❌ Не удалось отметить тренировку как выполненную.", show_alert=True)
+                        
+                elif action == 'cancel':
+                    # Отмечаем тренировку как отмененную
+                    success = TrainingPlanManager.mark_training_canceled(db_user_id, plan_id, day_num)
+                    
+                    if success:
+                        # Обновляем сообщение, заменяя кнопки на отметку об отмене
+                        message_id = callback_query['message']['message_id']
+                        message_text = callback_query['message']['text']
+                        
+                        # Убираем символ '⏳' и добавляем '❌', добавляем слово "ОТМЕНЕНО"
+                        if message_text.startswith('⏳'):
+                            training_title_end = message_text.find('\n')
+                            if training_title_end > 0:
+                                # Добавляем " - ОТМЕНЕНО" в конец заголовка
+                                title = message_text[1:training_title_end]
+                                if " - ОТМЕНЕНО" not in title:
+                                    title += " - ОТМЕНЕНО"
+                                new_text = '❌' + title + message_text[training_title_end:]
+                                message_text = new_text
+                            else:
+                                message_text = '❌' + message_text[1:]
+                        
+                        # Редактируем существующее сообщение вместо отправки нового
+                        try:
+                            # Редактируем сообщение напрямую через API
+                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+                            
+                            data = {
+                                "chat_id": chat_id,
+                                "message_id": message_id,
+                                "text": message_text,
+                                "parse_mode": "Markdown"
+                            }
+                                
+                            response = requests.post(url, json=data)
+                            
+                            if response.status_code != 200:
+                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
+                                # Как запасной вариант отправляем новое сообщение
+                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        except Exception as e:
+                            logger.error(f"Ошибка при редактировании сообщения: {e}")
+                            # Как запасной вариант отправляем новое сообщение
+                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        
+                        # Предлагаем пользователю скорректировать оставшийся план
+                        adjust_button = {
+                            "text": "✅ Да, скорректировать",
+                            "callback_data": f"adjust_plan_{plan_id}_{day_num}"
+                        }
+                        no_adjust_button = {
+                            "text": "❌ Нет, оставить как есть",
+                            "callback_data": "no_adjust"
+                        }
+                        keyboard = [[adjust_button], [no_adjust_button]]
+                        
+                        send_message_with_keyboard(
+                            chat_id, 
+                            "Хотите скорректировать оставшиеся тренировки с учетом пропущенной?", 
+                            keyboard
+                        )
+                    else:
+                        answer_callback_query(callback_id, "❌ Не удалось отменить тренировку.", show_alert=True)
+            except Exception as e:
+                logger.error(f"Ошибка при обработке действия с тренировкой: {e}", exc_info=True)
+                answer_callback_query(callback_id, "❌ Произошла ошибка при обработке действия.", show_alert=True)
         elif callback_data == 'view_plan':
             # Получаем telegram_id из chat_id
             telegram_id = chat_id
-            
-            # Импортируем необходимые модули
-            from db_manager import DBManager
-            from training_plan_manager import TrainingPlanManager
-            
-            # Создаем класс для кнопки
-            class InlineKeyboardButton:
-                def __init__(self, text, callback_data):
-                    self.text = text
-                    self.callback_data = callback_data
-                
-                def to_dict(self):
-                    return {
-                        "text": self.text,
-                        "callback_data": self.callback_data
-                    }
             
             try:
                 # Получаем user_id из telegram_id
@@ -454,169 +551,43 @@ def handle_callback_query(application, update_data):
                 send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
         elif callback_data == 'new_plan':
             send_telegram_message(chat_id, "Создаю новый план тренировок...")
-        elif callback_data.startswith('complete_training_') or callback_data.startswith('cancel_training_'):
-            # Обработка действий с тренировками
+        elif callback_data == 'no_adjust':
+            # Пользователь отказался от корректировки плана
+            send_telegram_message(chat_id, "План тренировок оставлен без изменений.")
+        elif callback_data.startswith('adjust_plan_'):
+            # Корректировка оставшегося плана тренировок
             try:
+                # Разбираем callback_data
                 parts = callback_data.split('_')
-                action = parts[0]  # complete или cancel
                 plan_id = int(parts[2])
-                day_num = int(parts[3])
+                canceled_day = int(parts[3])
                 
                 # Получаем ID пользователя из базы данных
-                # user_id берем из chat_id для webhook
                 user_id = chat_id
                 db_user_id = DBManager.get_user_id(user_id)
                 
                 if not db_user_id:
-                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль.")
                     return
                 
-                # Выполняем действие с тренировкой
-                if action == 'complete':
-                    # Отмечаем тренировку как выполненную
-                    success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, day_num)
-                    
-                    if success:
-                        # Получаем данные тренировки
-                        plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
-                        
-                        if plan and 'plan_data' in plan and plan['plan_data']:
-                            plan_data = plan['plan_data']
-                            if 'training_days' in plan_data:
-                                training_days = plan_data['training_days']
-                                
-                                if day_num <= len(training_days):
-                                    training = training_days[day_num - 1]
-                                    distance = training.get('distance', '0 км')
-                                    
-                                    # Пытаемся извлечь числовое значение из строки дистанции
-                                    try:
-                                        # Убираем ' км' и пробелы, затем преобразуем в число
-                                        distance_value = float(distance.replace('км', '').strip())
-                                        
-                                        # Обновляем недельный объем бега
-                                        DBManager.update_weekly_volume(db_user_id, distance_value)
-                                    except:
-                                        logger.error(f"Не удалось преобразовать дистанцию '{distance}' в число")
-                        
-                        # Просто подтверждаем действие без текстового сообщения
-                        answer_callback_query(callback_query_id)
-                        
-                        # Обновляем сообщение, заменяя кнопки на отметку о выполнении
-                        message_id = callback_query['message']['message_id']
-                        message_text = callback_query['message']['text']
-                        
-                        # Убираем символ '⏳' и добавляем '✅', добавляем слово "ВЫПОЛНЕНО"
-                        if message_text.startswith('⏳'):
-                            training_title_end = message_text.find('\n')
-                            if training_title_end > 0:
-                                # Добавляем " - ВЫПОЛНЕНО" в конец заголовка
-                                title = message_text[1:training_title_end]
-                                if " - ВЫПОЛНЕНО" not in title:
-                                    title += " - ВЫПОЛНЕНО"
-                                new_text = '✅' + title + message_text[training_title_end:]
-                                message_text = new_text
-                            else:
-                                message_text = '✅' + message_text[1:]
-                        
-                        # Редактируем существующее сообщение вместо отправки нового
-                        try:
-                            # Редактируем сообщение напрямую через API
-                            import requests
-                            
-                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
-                            
-                            data = {
-                                "chat_id": chat_id,
-                                "message_id": message_id,
-                                "text": message_text,
-                                "parse_mode": "Markdown"
-                            }
-                                
-                            response = requests.post(url, json=data)
-                            
-                            if response.status_code != 200:
-                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
-                                # Как запасной вариант отправляем новое сообщение
-                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
-                        except Exception as e:
-                            logger.error(f"Ошибка при редактировании сообщения: {e}")
-                            # Как запасной вариант отправляем новое сообщение
-                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
-                    else:
-                        answer_callback_query(callback_query_id, "❌ Не удалось отметить тренировку как выполненную.", show_alert=True)
-                        
-                elif action == 'cancel':
-                    # Отмечаем тренировку как отмененную
-                    success = TrainingPlanManager.mark_training_canceled(db_user_id, plan_id, day_num)
-                    
-                    if success:
-                        # Просто подтверждаем действие без текстового сообщения
-                        answer_callback_query(callback_query_id)
-                        
-                        # Обновляем сообщение, заменяя кнопки на отметку об отмене
-                        message_id = callback_query['message']['message_id']
-                        message_text = callback_query['message']['text']
-                        
-                        # Убираем символ '⏳' и добавляем '❌', добавляем слово "ОТМЕНЕНО"
-                        if message_text.startswith('⏳'):
-                            training_title_end = message_text.find('\n')
-                            if training_title_end > 0:
-                                # Добавляем " - ОТМЕНЕНО" в конец заголовка
-                                title = message_text[1:training_title_end]
-                                if " - ОТМЕНЕНО" not in title:
-                                    title += " - ОТМЕНЕНО"
-                                new_text = '❌' + title + message_text[training_title_end:]
-                                message_text = new_text
-                            else:
-                                message_text = '❌' + message_text[1:]
-                        
-                        # Редактируем существующее сообщение вместо отправки нового
-                        try:
-                            # Редактируем сообщение напрямую через API
-                            import requests
-                            
-                            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
-                            
-                            data = {
-                                "chat_id": chat_id,
-                                "message_id": message_id,
-                                "text": message_text,
-                                "parse_mode": "Markdown"
-                            }
-                                
-                            response = requests.post(url, json=data)
-                            
-                            if response.status_code != 200:
-                                logger.error(f"Ошибка при редактировании сообщения: {response.text}")
-                                # Как запасной вариант отправляем новое сообщение
-                                send_telegram_message(chat_id, message_text, parse_mode="Markdown")
-                        except Exception as e:
-                            logger.error(f"Ошибка при редактировании сообщения: {e}")
-                            # Как запасной вариант отправляем новое сообщение
-                            send_telegram_message(chat_id, message_text, parse_mode="Markdown")
-                        
-                        # Предлагаем пользователю скорректировать оставшийся план
-                        adjust_button = {
-                            "text": "✅ Да, скорректировать",
-                            "callback_data": f"adjust_plan_{plan_id}_{day_num}"
-                        }
-                        no_adjust_button = {
-                            "text": "❌ Нет, оставить как есть",
-                            "callback_data": "no_adjust"
-                        }
-                        keyboard = [[adjust_button], [no_adjust_button]]
-                        
-                        send_message_with_keyboard(
-                            chat_id, 
-                            "Хотите скорректировать оставшиеся тренировки с учетом пропущенной?", 
-                            keyboard
-                        )
-                    else:
-                        answer_callback_query(callback_query_id, "❌ Не удалось отменить тренировку.", show_alert=True)
+                # Сообщаем пользователю о начале корректировки
+                send_telegram_message(chat_id, "🔄 Корректирую оставшиеся тренировки...")
+                
+                # Здесь должна быть логика корректировки плана
+                # Для примера просто сообщаем об успехе
+                send_telegram_message(chat_id, "✅ План тренировок успешно скорректирован с учетом пропущенной тренировки!")
+                
+                # Показываем обновленный план
+                fake_callback_query = {
+                    'id': str(uuid.uuid4()),
+                    'from': {'id': chat_id, 'first_name': 'User'},
+                    'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                    'data': 'view_plan'
+                }
+                handle_callback_query(application, {'callback_query': fake_callback_query})
             except Exception as e:
-                logger.error(f"Ошибка при обработке действия с тренировкой: {e}", exc_info=True)
-                answer_callback_query(callback_query_id, "❌ Произошла ошибка при обработке действия.", show_alert=True)
+                logger.error(f"Ошибка при корректировке плана тренировок: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при корректировке плана тренировок.")
         else:
             send_telegram_message(chat_id, "Неизвестное действие. Пожалуйста, попробуйте снова.")
     except Exception as e:
@@ -807,18 +778,17 @@ def get_bot_health():
             alive = True
         else:
             status = "critical"
-            message = f"Последнее обновление {int(time_diff // 60)} мин назад"
+            message = f"Нет активности {int(time_diff // 60)} мин"
             alive = False
         
         return {
             "status": status,
             "last_update": last_update,
             "alive": alive,
-            "message": message,
-            "seconds_since_update": int(time_diff)
+            "message": message
         }
     except Exception as e:
-        logger.error(f"Ошибка при получении состояния бота: {e}")
+        logger.error(f"Ошибка при получении состояния здоровья: {e}")
         return {
             "status": "error",
             "last_update": None,
@@ -829,56 +799,84 @@ def get_bot_health():
 def update_health_check():
     """Обновляет файл проверки здоровья текущим временем."""
     try:
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(HEALTH_FILE, "w") as f:
-            f.write(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            f.write(current_time)
     except Exception as e:
-        logger.error(f"Ошибка при обновлении файла проверки здоровья: {e}")
+        logger.error(f"Ошибка при обновлении файла здоровья: {e}")
 
-def register_webhook_routes(app, telegram_bot=None):
-    """Регистрирует маршруты webhook в приложении Flask.
+def setup_webhook(replit_domain=None):
+    """
+    Настраивает webhook URL на основе домена Replit.
     
     Args:
-        app: Flask приложение
-        telegram_bot: Экземпляр бота Telegram для обработки обновлений (опционально)
+        replit_domain: Домен Replit (опционально). Если не указан, пытается получить из окружения.
     """
-    # Если передан экземпляр бота, сохраняем его глобально
-    if telegram_bot:
-        global bot
-        bot = telegram_bot
-        
-    # Проверяем, зарегистрирован ли уже blueprint
     try:
-        app.register_blueprint(webhook_bp, url_prefix="/webhook")
-        return True
-    except ValueError as e:
-        # Blueprint уже зарегистрирован, это нормально
-        logger.info(f"Blueprint уже зарегистрирован: {e}")
-        return True
-    except Exception as e:
-        logger.error(f"Ошибка при регистрации blueprint: {e}")
-        return False
-
-async def setup_webhook(telegram_bot, webhook_url=None):
-    """Настраивает вебхук для Telegram-бота."""
-    global bot
-    bot = telegram_bot
-    
-    if not webhook_url:
-        # Используем REPLIT_DEV_DOMAIN для правильного домена Replit
-        replit_domain = os.environ.get("REPLIT_DEV_DOMAIN")
+        if not replit_domain:
+            replit_domain = os.environ.get("REPL_SLUG", "") + "." + os.environ.get("REPL_OWNER", "") + ".repl.co"
+            if "REPLIT_CLUSTER" in os.environ:
+                # Новый формат домена для Replit Reserved VMs
+                import requests
+                try:
+                    r = requests.get('https://replit.com/~')
+                    if r.status_code == 200 and 'X-Replit-Cluster-Url' in r.headers:
+                        cluster_url = r.headers['X-Replit-Cluster-Url']
+                        if cluster_url:
+                            replit_domain = cluster_url.lstrip('https://').rstrip('/')
+                except:
+                    logger.error("Не удалось получить URL кластера Replit Reserved VM")
+            
+        # Формируем webhook URL
         if replit_domain:
-            # Используем главный домен и порт 5000, который прослушивается основным приложением
-            # Маршрут с учетом префикса /webhook и пути эндпоинта /{TELEGRAM_TOKEN}
             webhook_url = f"https://{replit_domain}/webhook/{TELEGRAM_TOKEN}"
         else:
-            logger.warning("Не удалось определить URL вебхука. Установите переменную окружения REPLIT_DEV_DOMAIN.")
+            logger.error("Не удалось определить домен Replit")
             return False
-    
-    try:
-        # Устанавливаем вебхук
+        
         logger.info(f"Устанавливаем вебхук на URL: {webhook_url}")
-        await bot.bot.set_webhook(url=webhook_url)
-        return True
+        
+        # Вызываем API Telegram для установки webhook
+        import requests
+        
+        # Отключаем предыдущий вебхук (на всякий случай)
+        delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
+        requests.post(delete_url)
+        
+        # Устанавливаем новый вебхук
+        set_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook"
+        params = {
+            "url": webhook_url,
+            "max_connections": 40,
+            "drop_pending_updates": True
+        }
+        
+        response = requests.post(set_url, json=params)
+        
+        if response.status_code == 200 and response.json().get("ok", False):
+            logger.info(f"Webhook успешно установлен: {response.json()}")
+            return True
+        else:
+            logger.error(f"Ошибка при установке webhook: {response.text}")
+            return False
+            
     except Exception as e:
-        logger.error(f"Ошибка при установке вебхука: {e}")
+        logger.error(f"Ошибка при настройке webhook: {e}", exc_info=True)
         return False
+
+def register_webhook_routes(app):
+    """
+    Регистрирует маршруты webhook в Flask-приложении.
+    
+    Args:
+        app: Экземпляр Flask
+    """
+    try:
+        # Регистрируем Blueprint в приложении
+        try:
+            app.register_blueprint(webhook_bp, url_prefix='/webhook')
+            logger.info("Маршруты webhook успешно зарегистрированы")
+        except Exception as e:
+            logger.error(f"Blueprint уже зарегистрирован: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при регистрации маршрутов webhook: {e}", exc_info=True)

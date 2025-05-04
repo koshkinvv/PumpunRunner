@@ -445,8 +445,8 @@ def main():
                     # Запускаем асинхронную инициализацию
                     asyncio.run(init_application())
                     
-                    # Регистрируем маршруты webhook
-                    register_webhook_routes(app, application)
+                    # Маршруты webhook уже зарегистрированы в app.py
+                    # register_webhook_routes(app, application)  # Закомментировано, чтобы избежать двойной регистрации
                     logging.info("Webhook маршруты успешно зарегистрированы")
                     
                     # В этом режиме мы просто ожидаем без бесконечного цикла

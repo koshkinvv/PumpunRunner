@@ -66,8 +66,8 @@ try:
     # Создаем экземпляр бота
     telegram_bot = setup_bot()
     
-    # Регистрируем маршруты webhook с передачей экземпляра бота
-    register_webhook_routes(app, telegram_bot)
+    # Регистрируем маршруты webhook без передачи экземпляра бота
+    register_webhook_routes(app)
     logger.info("Маршруты webhook успешно зарегистрированы")
 except ImportError:
     logger.warning("Модули webhook не найдены. Webhook не будет настроен.")
