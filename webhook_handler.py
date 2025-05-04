@@ -333,7 +333,16 @@ def handle_callback_query(application, update_data):
                             day_info += f"Темп: {day['pace']}\n"
                             day_info += f"Описание: {day['description']}"
                             
-                            send_telegram_message(chat_id, f"⏳ {day_info}", parse_mode="Markdown")
+                            # Создаем кнопки действий для этой тренировки
+                            training_keyboard = [
+                                [
+                                    InlineKeyboardButton("✅ Выполнено", callback_data=f"complete_training_{plan_id}_{day_num}"),
+                                    InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_training_{plan_id}_{day_num}")
+                                ]
+                            ]
+                            
+                            # Отправляем сообщение с тренировкой и кнопками
+                            send_message_with_keyboard(chat_id, f"⏳ {day_info}", training_keyboard, parse_mode="Markdown")
                 
                 # Если нет ни выполненных, ни предстоящих тренировок
                 if not has_completed and not has_upcoming:
@@ -352,6 +361,98 @@ def handle_callback_query(application, update_data):
                 send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
         elif callback_data == 'new_plan':
             send_telegram_message(chat_id, "Создаю новый план тренировок...")
+        elif callback_data.startswith('complete_training_') or callback_data.startswith('cancel_training_'):
+            # Обработка действий с тренировками
+            try:
+                parts = callback_data.split('_')
+                action = parts[0]  # complete или cancel
+                plan_id = int(parts[2])
+                day_num = int(parts[3])
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(user_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Выполняем действие с тренировкой
+                if action == 'complete':
+                    # Отмечаем тренировку как выполненную
+                    success = TrainingPlanManager.mark_training_completed(db_user_id, plan_id, day_num)
+                    
+                    if success:
+                        # Получаем данные тренировки
+                        plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+                        
+                        if plan and 'plan_data' in plan and plan['plan_data']:
+                            plan_data = plan['plan_data']
+                            if 'training_days' in plan_data:
+                                training_days = plan_data['training_days']
+                                
+                                if day_num <= len(training_days):
+                                    training = training_days[day_num - 1]
+                                    distance = training.get('distance', '0 км')
+                                    
+                                    # Пытаемся извлечь числовое значение из строки дистанции
+                                    try:
+                                        # Убираем ' км' и пробелы, затем преобразуем в число
+                                        distance_value = float(distance.replace('км', '').strip())
+                                        
+                                        # Обновляем недельный объем бега
+                                        DBManager.update_weekly_volume(db_user_id, distance_value)
+                                    except:
+                                        logger.error(f"Не удалось преобразовать дистанцию '{distance}' в число")
+                        
+                        answer_callback_query(callback_query_id, "✅ Тренировка отмечена как выполненная!")
+                        
+                        # Обновляем сообщение, заменяя кнопки на отметку о выполнении
+                        message_id = callback_query['message']['message_id']
+                        message_text = callback_query['message']['text']
+                        
+                        # Убираем символ '⏳' и добавляем '✅'
+                        if message_text.startswith('⏳'):
+                            message_text = '✅' + message_text[1:]
+                        
+                        # Отправляем обновленное сообщение без кнопок
+                        send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                    else:
+                        answer_callback_query(callback_query_id, "❌ Не удалось отметить тренировку как выполненную.", show_alert=True)
+                        
+                elif action == 'cancel':
+                    # Отмечаем тренировку как отмененную
+                    success = TrainingPlanManager.mark_training_canceled(db_user_id, plan_id, day_num)
+                    
+                    if success:
+                        answer_callback_query(callback_query_id, "❌ Тренировка отменена.")
+                        
+                        # Обновляем сообщение, заменяя кнопки на отметку об отмене
+                        message_id = callback_query['message']['message_id']
+                        message_text = callback_query['message']['text']
+                        
+                        # Убираем символ '⏳' и добавляем '❌'
+                        if message_text.startswith('⏳'):
+                            message_text = '❌' + message_text[1:]
+                        
+                        # Отправляем обновленное сообщение без кнопок
+                        send_telegram_message(chat_id, message_text, parse_mode="Markdown")
+                        
+                        # Предлагаем пользователю скорректировать оставшийся план
+                        keyboard = [
+                            [InlineKeyboardButton("✅ Да, скорректировать", callback_data=f"adjust_plan_{plan_id}_{day_num}")],
+                            [InlineKeyboardButton("❌ Нет, оставить как есть", callback_data="no_adjust")]
+                        ]
+                        
+                        send_message_with_keyboard(
+                            chat_id, 
+                            "Хотите скорректировать оставшиеся тренировки с учетом пропущенной?", 
+                            keyboard
+                        )
+                    else:
+                        answer_callback_query(callback_query_id, "❌ Не удалось отменить тренировку.", show_alert=True)
+            except Exception as e:
+                logger.error(f"Ошибка при обработке действия с тренировкой: {e}", exc_info=True)
+                answer_callback_query(callback_query_id, "❌ Произошла ошибка при обработке действия.", show_alert=True)
         else:
             send_telegram_message(chat_id, "Неизвестное действие. Пожалуйста, попробуйте снова.")
     except Exception as e:
