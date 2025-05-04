@@ -437,13 +437,13 @@ def main():
                     # Импортируем asyncio
                     import asyncio
                     
-                    # Инициализируем приложение для работы через webhook
-                    async def init_application():
-                        await application.initialize()
-                        await setup_webhook(application)
+                    # Инициализируем приложение и webhook
+                    # Сначала инициализируем приложение синхронно
+                    application.initialize_sync()
                     
-                    # Запускаем асинхронную инициализацию
-                    asyncio.run(init_application())
+                    # Затем напрямую вызываем setup_webhook без await
+                    replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+                    setup_webhook(replit_domain)
                     
                     # Маршруты webhook уже зарегистрированы в app.py
                     # register_webhook_routes(app, application)  # Закомментировано, чтобы избежать двойной регистрации

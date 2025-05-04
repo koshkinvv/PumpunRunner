@@ -829,7 +829,19 @@ def setup_webhook(replit_domain=None):
             
         # Формируем webhook URL
         if replit_domain:
-            webhook_url = f"https://{replit_domain}/webhook/{TELEGRAM_TOKEN}"
+            # ИСПРАВЛЕНИЕ: Убираем строку Application[bot=ExtBot] из URL
+            if isinstance(replit_domain, str):
+                webhook_url = f"https://{replit_domain}/webhook/{TELEGRAM_TOKEN}"
+            else:
+                # Если replit_domain не строка, используем переменную окружения
+                import os
+                slug = os.environ.get("REPL_SLUG", "")
+                owner = os.environ.get("REPL_OWNER", "")
+                if slug and owner:
+                    webhook_url = f"https://{slug}.{owner}.repl.co/webhook/{TELEGRAM_TOKEN}"
+                else:
+                    logger.error("Не удалось определить домен Replit из Application объекта или переменных окружения")
+                    return False
         else:
             logger.error("Не удалось определить домен Replit")
             return False
