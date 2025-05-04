@@ -764,6 +764,121 @@ async def callback_query_handler(update, context):
             logging.error(f"Error handling none_match button: {e}")
             await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
     
+    # Обработка кнопки показа истории тренировок
+    elif query.data.startswith("show_history_"):
+        # Формат: show_history_PLAN_ID
+        try:
+            _, _, plan_id = query.data.split('_')
+            plan_id = int(plan_id)
+            
+            # Получаем информацию о плане тренировок
+            plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+            if not plan:
+                await query.message.reply_text("❌ Не удалось найти план тренировок.")
+                return
+            
+            # Получаем выполненные и отмененные тренировки
+            completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+            
+            # Отправляем заголовок истории тренировок
+            await query.message.reply_text(
+                "📜 *История тренировок:*",
+                parse_mode='Markdown'
+            )
+            
+            # Проверяем, есть ли выполненные тренировки
+            if completed:
+                await query.message.reply_text(
+                    "✅ *Выполненные тренировки:*",
+                    parse_mode='Markdown'
+                )
+                
+                # Отправляем информацию о выполненных тренировках
+                for day_num in sorted(completed):
+                    # Определяем день тренировки
+                    day_idx = day_num - 1
+                    
+                    # Определяем структуру плана
+                    training_days = []
+                    if 'training_days' in plan:
+                        training_days = plan['training_days']
+                    elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                        training_days = plan['plan_data']['training_days']
+                    
+                    if day_idx < 0 or day_idx >= len(training_days):
+                        continue
+                    
+                    day = training_days[day_idx]
+                    
+                    # Определяем тип тренировки
+                    training_type = day.get('training_type') or day.get('type', 'Не указан')
+                    
+                    # Формируем сообщение о дне тренировки
+                    training_message = (
+                        f"✅ *День {day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {training_type}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    await query.message.reply_text(
+                        training_message,
+                        parse_mode='Markdown'
+                    )
+            
+            # Проверяем, есть ли отмененные тренировки
+            if canceled:
+                await query.message.reply_text(
+                    "❌ *Отмененные тренировки:*",
+                    parse_mode='Markdown'
+                )
+                
+                # Отправляем информацию об отмененных тренировках
+                for day_num in sorted(canceled):
+                    # Определяем день тренировки
+                    day_idx = day_num - 1
+                    
+                    # Определяем структуру плана
+                    training_days = []
+                    if 'training_days' in plan:
+                        training_days = plan['training_days']
+                    elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                        training_days = plan['plan_data']['training_days']
+                    
+                    if day_idx < 0 or day_idx >= len(training_days):
+                        continue
+                    
+                    day = training_days[day_idx]
+                    
+                    # Определяем тип тренировки
+                    training_type = day.get('training_type') or day.get('type', 'Не указан')
+                    
+                    # Формируем сообщение о дне тренировки
+                    training_message = (
+                        f"❌ *День {day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {training_type}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    await query.message.reply_text(
+                        training_message,
+                        parse_mode='Markdown'
+                    )
+            
+            # Если нет ни выполненных, ни отмененных тренировок
+            if not completed and not canceled:
+                await query.message.reply_text(
+                    "ℹ️ У вас пока нет выполненных или отмененных тренировок в этом плане."
+                )
+            
+        except Exception as e:
+            logging.error(f"Ошибка при показе истории тренировок: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при показе истории тренировок.")
+    
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
@@ -1302,8 +1417,9 @@ def setup_bot():
             # Получаем обработанные тренировки
             completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan['id'])
             canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan['id'])
+            processed_days = completed + canceled  # Все обработанные дни
             
-            # Отправляем план
+            # Отправляем общую информацию о плане
             await update.message.reply_text(
                 f"✅ Ваш персонализированный план тренировок:\n\n"
                 f"*{plan['plan_name']}*\n\n"
@@ -1311,48 +1427,97 @@ def setup_bot():
                 parse_mode='Markdown'
             )
             
-            # Отправляем дни тренировок
-            for idx, day in enumerate(plan['plan_data']['training_days']):
-                training_day_num = idx + 1
-                
-                # Проверяем статус
-                status = ""
-                if training_day_num in completed:
-                    status = "✅ "
-                elif training_day_num in canceled:
-                    status = "❌ "
-                
-                # Создаем сообщение с днем тренировки
-                # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
-                training_type = day.get('training_type') or day.get('type', 'Не указан')
-                
-                training_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {training_type}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
+            # Проверяем, есть ли предстоящие тренировки
+            has_pending_trainings = False
+            total_training_days = len(plan['plan_data']['training_days'])
+            
+            # Считаем количество предстоящих тренировок
+            pending_count = total_training_days - len(processed_days)
+            
+            # Если есть предстоящие тренировки, отправляем сначала их
+            if pending_count > 0:
+                await update.message.reply_text(
+                    "📆 *Предстоящие тренировки:*",
+                    parse_mode='Markdown'
                 )
                 
-                # Добавляем кнопки, если тренировка еще не обработана
-                if training_day_num not in completed and training_day_num not in canceled:
+                # Отправляем только предстоящие дни тренировок
+                pending_shown = False
+                for idx, day in enumerate(plan['plan_data']['training_days']):
+                    training_day_num = idx + 1
+                    
+                    # Пропускаем обработанные тренировки
+                    if training_day_num in processed_days:
+                        continue
+                    
+                    pending_shown = True
+                    
+                    # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
+                    training_type = day.get('training_type') or day.get('type', 'Не указан')
+                    
+                    training_message = (
+                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {training_type}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    # Добавляем кнопки для предстоящих тренировок
                     keyboard = InlineKeyboardMarkup([
                         [InlineKeyboardButton("✅ Отметить как выполненное", 
-                                            callback_data=f"complete_{plan['id']}_{training_day_num}")],
+                                          callback_data=f"complete_{plan['id']}_{training_day_num}")],
                         [InlineKeyboardButton("❌ Отменить", 
-                                            callback_data=f"cancel_{plan['id']}_{training_day_num}")]
+                                          callback_data=f"cancel_{plan['id']}_{training_day_num}")]
                     ])
                     
                     await update.message.reply_text(
-                        f"{status}{training_message}",
+                        training_message,
                         reply_markup=keyboard,
                         parse_mode='Markdown'
                     )
-                else:
+                
+                # На случай, если что-то пошло не так и у нас нет предстоящих тренировок
+                if not pending_shown:
                     await update.message.reply_text(
-                        f"{status}{training_message}",
-                        parse_mode='Markdown'
+                        "⚠️ Не удалось найти предстоящие тренировки, хотя они должны быть. "
+                        "Это может быть ошибкой в данных."
                     )
+            
+            # Если есть завершенные или отмененные тренировки, показываем их после предстоящих
+            if completed or canceled:
+                # Создаем кнопку для отображения истории тренировок
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📜 Показать историю тренировок", 
+                                      callback_data=f"show_history_{plan['id']}")]
+                ])
+                
+                # Информация о прогрессе
+                total_completed_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan['id'])
+                
+                await update.message.reply_text(
+                    f"📊 *Статистика плана:*\n\n"
+                    f"Всего тренировок: {total_training_days}\n"
+                    f"Выполнено: {len(completed)}\n"
+                    f"Отменено: {len(canceled)}\n"
+                    f"Осталось: {pending_count}\n"
+                    f"Пройдено километров: {total_completed_distance:.1f} км",
+                    parse_mode='Markdown',
+                    reply_markup=keyboard
+                )
+            
+            # Если все тренировки выполнены или отменены, предлагаем продолжить тренировки
+            if pending_count == 0:
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Продолжить тренировки", 
+                                      callback_data=f"continue_plan_{plan['id']}")]
+                ])
+                
+                await update.message.reply_text(
+                    "🎉 Все тренировки в текущем плане выполнены или отменены! "
+                    "Хотите продолжить тренировки с учетом вашего прогресса?",
+                    reply_markup=keyboard
+                )
                 
         elif text == "🆕 Создать новый план":
             # Отправляем сообщение с котиком
