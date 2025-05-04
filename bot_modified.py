@@ -1286,11 +1286,13 @@ async def handle_photo(update, context):
             f"Источник: *{workout_app}*\n\n"
         )
         
-        # If we found a matching training day
+        # Если мы нашли подходящий день тренировки с высоким рейтингом
         if matching_day_idx is not None and matching_score >= 5:
             # Get the matched training day number (1-based index)
             matched_day_num = matching_day_idx + 1
             matched_day = training_days[matching_day_idx]
+            
+            logging.info(f"Автоматически сопоставлен день тренировки: День {matched_day_num} ({matched_day['day']} {matched_day['date']})")
             
             # Check if this training day is already processed
             if matched_day_num in processed_days:
@@ -1412,26 +1414,24 @@ async def handle_photo(update, context):
                     parse_mode='Markdown'
                 )
         else:
-            # No matching training day found
-            # Create inline buttons for all unprocessed training days
+            # Создаем кнопки для всех непомеченных дней тренировки, чтобы пользователь мог выбрать вручную
             buttons = []
             for idx, day in enumerate(training_days):
                 day_num = idx + 1
                 if day_num not in processed_days:
                     buttons.append([InlineKeyboardButton(
                         f"День {day_num}: {day['day']} ({day['date']}) - {day['distance']}",
-                        callback_data=f"complete_{plan_id}_{day_num}"
+                        callback_data=f"manual_match_{plan_id}_{day_num}_{workout_distance}"
                     )])
             
-            # Add a "None of these" button
-            buttons.append([InlineKeyboardButton("❌ Ни один из этих дней", callback_data="none_match")])
+            # Добавляем кнопку "Это дополнительная тренировка"
+            buttons.append([InlineKeyboardButton("🏃‍♂️ Это дополнительная тренировка", callback_data="extra_training")])
             
             keyboard = InlineKeyboardMarkup(buttons)
             
             await update.message.reply_text(
-                f"{ack_message}❓ Я не смог автоматически сопоставить эту тренировку с вашим планом.\n\n"
-                f"Выберите день тренировки, который соответствует этой активности, или выберите 'Ни один из этих дней', "
-                f"если это была дополнительная тренировка вне плана:",
+                f"{ack_message}❓ Не удалось автоматически сопоставить эту тренировку с вашим планом.\n\n"
+                f"Пожалуйста, выберите день тренировки, который хотите отметить как выполненный:",
                 parse_mode='Markdown',
                 reply_markup=keyboard
             )
