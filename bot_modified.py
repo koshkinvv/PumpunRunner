@@ -1514,7 +1514,11 @@ async def handle_photo(update, context):
                 # 1) разница больше 20%
                 # 2) есть training_days
                 # 3) не является последним днем плана (если matched_day_num == 7 в плане из 7 дней)
-                if diff_percent > 20 and training_days:
+                # Проверяем, остались ли непройденные дни в плане (не обрабатываем, если это последний день плана)
+                remaining_days = len([day_num for day_num in range(1, len(training_days) + 1) if day_num > matched_day_num and day_num not in processed_days])
+                logging.info(f"Оставшиеся необработанные дни в плане: {remaining_days}")
+                
+                if diff_percent > 20 and training_days and remaining_days > 0:
                     # Add a message about the significant difference
                     if actual_distance > planned_distance:
                         training_completion_msg += (
