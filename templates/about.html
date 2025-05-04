@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}О боте для бегунов{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">О Telegram-боте для бегунов</h1>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title">Описание бота</h5>
+    </div>
+    <div class="card-body">
+        <p>
+            Бот для бегунов - это мощный инструмент для создания персонализированных планов тренировок и отслеживания
+            прогресса. Бот помогает бегунам готовиться к соревнованиям, поддерживать мотивацию и достигать результатов.
+        </p>
+        
+        <h5 class="mt-4">Ключевые возможности:</h5>
+        <ul>
+            <li>Создание индивидуальных планов тренировок на основе профиля бегуна</li>
+            <li>Автоматическое распознавание скриншотов из популярных трекеров (Strava, Nike Run, Garmin)</li>
+            <li>Отслеживание прогресса и еженедельного объема бега</li>
+            <li>Интеллектуальная корректировка плана при значительных отклонениях от плана</li>
+            <li>Статистика и аналитика тренировок</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title">Технологии</h5>
+    </div>
+    <div class="card-body">
+        <h5>Backend:</h5>
+        <ul>
+            <li>Python</li>
+            <li>python-telegram-bot для работы с Telegram API</li>
+            <li>OpenAI API для создания персонализированных планов и анализа скриншотов</li>
+            <li>SQLAlchemy ORM</li>
+            <li>PostgreSQL для хранения данных</li>
+        </ul>
+        
+        <h5 class="mt-3">Frontend:</h5>
+        <ul>
+            <li>Flask для веб-интерфейса администрирования</li>
+            <li>Bootstrap CSS для стилизации</li>
+        </ul>
+        
+        <h5 class="mt-3">Инфраструктура:</h5>
+        <ul>
+            <li>Многоуровневая система мониторинга и стабильности</li>
+            <li>Автоматический перезапуск при сбоях</li>
+            <li>Ротация логов и контроль использования ресурсов</li>
+            <li>Поддержка Reserved VM для непрерывной работы</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title">Команды бота</h5>
+    </div>
+    <div class="card-body">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Команда</th>
+                    <th>Описание</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/start</code></td>
+                    <td>Начать работу с ботом и создать профиль бегуна</td>
+                </tr>
+                <tr>
+                    <td><code>/help</code></td>
+                    <td>Показать справку по командам бота</td>
+                </tr>
+                <tr>
+                    <td><code>/plan</code></td>
+                    <td>Создать новый план тренировок</td>
+                </tr>
+                <tr>
+                    <td><code>/profile</code></td>
+                    <td>Показать ваш текущий профиль бегуна</td>
+                </tr>
+                <tr>
+                    <td><code>/trainings</code></td>
+                    <td>Показать ваш текущий план тренировок</td>
+                </tr>
+                <tr>
+                    <td><code>/pending</code></td>
+                    <td>Показать только невыполненные тренировки</td>
+                </tr>
+                <tr>
+                    <td><code>/stats</code></td>
+                    <td>Показать статистику ваших тренировок</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <p class="mt-3">
+            Кроме того, вы можете отправить боту скриншот из приложения для бега (Strava, Nike Run, Garmin), и он автоматически распознает 
+            данные тренировки и отметит соответствующий день в вашем плане как выполненный.
+        </p>
+    </div>
+</div>
+
+<div class="mt-4 text-center">
+    <p>
+        <a href="https://t.me/your_bot_username" target="_blank" class="btn btn-primary">
+            Перейти к боту в Telegram
+        </a>
+    </p>
+</div>
+{% endblock %}

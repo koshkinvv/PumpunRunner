@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Бот для бегунов - Логи{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Логи Telegram-бота для бегунов</h1>
+
+{% if logs %}
+<ul class="nav nav-tabs mb-3" id="logsTabs" role="tablist">
+    {% for log_file, log_content in logs.items() %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link {% if loop.first %}active{% endif %}" id="tab-{{ loop.index }}" data-bs-toggle="tab" data-bs-target="#content-{{ loop.index }}" type="button" role="tab">
+            {{ log_file }}
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="tab-content" id="logsContent">
+    {% for log_file, log_content in logs.items() %}
+    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="content-{{ loop.index }}" role="tabpanel">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">{{ log_file }}</h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleFullscreen('content-{{ loop.index }}')">
+                    Развернуть/свернуть
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="logs-container" style="max-height: 500px;">
+                    {% for line in log_content %}
+                    <div class="log-line {% if 'ERROR' in line %}text-danger{% elif 'WARNING' in line %}text-warning{% elif 'INFO' in line %}text-info{% endif %}">
+                        {{ line }}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    <h4 class="alert-heading">Логи не найдены</h4>
+    <p>В системе не найдено файлов логов. Возможно, бот еще не был запущен или логи не были сохранены.</p>
+</div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="/" class="btn btn-primary">Вернуться к состоянию</a>
+    <button class="btn btn-outline-secondary ms-2" onclick="window.location.reload();">Обновить логи</button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Функция для переключения полноэкранного режима
+    function toggleFullscreen(id) {
+        const element = document.getElementById(id);
+        const container = element.querySelector('.logs-container');
+        
+        if (container.style.maxHeight === '500px') {
+            container.style.maxHeight = '1000px';
+        } else {
+            container.style.maxHeight = '500px';
+        }
+    }
+    
+    // Автопрокрутка до последней строки в логах
+    document.addEventListener('DOMContentLoaded', function() {
+        const activeTab = document.querySelector('.tab-pane.active');
+        if (activeTab) {
+            const container = activeTab.querySelector('.logs-container');
+            container.scrollTop = container.scrollHeight;
+        }
+    });
+    
+    // Обработчик переключения вкладок
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(function(tab) {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const activeTab = document.querySelector(e.target.dataset.bsTarget);
+            const container = activeTab.querySelector('.logs-container');
+            container.scrollTop = container.scrollHeight;
+        });
+    });
+    
+    // Автоматическое обновление страницы каждые 60 секунд
+    setTimeout(function() {
+        window.location.reload();
+    }, 60000);
+</script>
+{% endblock %}
