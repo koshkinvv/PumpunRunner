@@ -27,8 +27,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("webhook_server")
 
-# Создаем Blueprint для webhook-функциональности
-webhook_bp = Blueprint("webhook", __name__)
+# Создаем Blueprint для webhook-функциональности с уникальным именем
+webhook_bp = Blueprint("telegram_webhook", __name__)
 
 @webhook_bp.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
 async def webhook():
@@ -161,6 +161,7 @@ async def setup_webhook(telegram_bot, webhook_url=None):
         replit_domain = os.environ.get("REPLIT_DEV_DOMAIN")
         if replit_domain:
             # Используем главный домен и порт 5000, который прослушивается основным приложением
+            # Маршрут с учетом префикса /webhook и пути эндпоинта /{TELEGRAM_TOKEN}
             webhook_url = f"https://{replit_domain}/webhook/{TELEGRAM_TOKEN}"
         else:
             logger.warning("Не удалось определить URL вебхука. Установите переменную окружения REPL_SLUG.")
