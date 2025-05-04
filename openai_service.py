@@ -31,26 +31,57 @@ class OpenAIService:
             # Prepare prompt with runner profile information
             prompt = self._create_prompt(runner_profile)
             
-            # Получаем текущую дату и последующие даты для тренировок
+            # Получаем даты для тренировок, учитывая выбранную пользователем дату начала
             from datetime import datetime, timedelta
             import pytz
             
-            # Генерируем все 7 дат для плана, используя Московское время (UTC+3)
-            # Поскольку сервер работает в UTC, а пользователь, скорее всего, находится в России (UTC+3)
+            # Используем Московское время (UTC+3)
             moscow_tz = pytz.timezone('Europe/Moscow')
-            today = datetime.now(pytz.UTC).astimezone(moscow_tz)
-            logging.info(f"Текущая дата и время (Москва): {today.strftime('%d.%m.%Y %H:%M:%S')}")
             
+            # Проверяем, указал ли пользователь дату начала тренировок
+            user_start_date = runner_profile.get('training_start_date_text', runner_profile.get('training_start_date', None))
+            
+            # Попытка распарсить дату начала тренировок
+            start_date = None
+            
+            if user_start_date and user_start_date.lower() != 'сегодня':
+                try:
+                    # Попробуем распарсить дату в формате "ДД.ММ.ГГГГ"
+                    logging.info(f"Пытаемся распарсить дату начала тренировок: {user_start_date}")
+                    
+                    # Обрабатываем несколько возможных форматов
+                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
+                    
+                    for fmt in formats:
+                        try:
+                            start_date = datetime.strptime(user_start_date, fmt)
+                            start_date = moscow_tz.localize(start_date)
+                            logging.info(f"Успешно распарсили дату: {start_date.strftime('%d.%m.%Y')}")
+                            break
+                        except ValueError:
+                            continue
+                except Exception as e:
+                    logging.error(f"Ошибка при парсинге даты начала тренировок: {e}")
+            
+            # Если не удалось распарсить дату или она не была указана, используем текущую дату
+            if not start_date:
+                start_date = datetime.now(pytz.UTC).astimezone(moscow_tz)
+                logging.info(f"Используем текущую дату: {start_date.strftime('%d.%m.%Y')}")
+            
+            logging.info(f"Дата начала тренировок: {start_date.strftime('%d.%m.%Y %H:%M:%S')}")
+            
+            # Генерируем все 7 дат для плана
             dates = []
             for i in range(7):
-                date = today + timedelta(days=i)
+                date = start_date + timedelta(days=i)
                 dates.append(date.strftime("%d.%m.%Y"))
             
-            today_str = dates[0]
-            tomorrow_str = dates[1]
+            # Для промпта OpenAI используем первый и второй день
+            first_day_str = dates[0]
+            second_day_str = dates[1]
             
             logging.info(f"Сгенерированные даты для плана: {dates}")
-            logging.info(f"Сегодня: {today_str}, завтра: {tomorrow_str}")
+            logging.info(f"Первый день: {first_day_str}, второй день: {second_day_str}")
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -59,9 +90,9 @@ class OpenAIService:
                     {"role": "system", "content": 
                      f"Ты опытный беговой тренер. Твоя задача - создать персонализированный план "
                      f"тренировок на 7 дней, основываясь на профиле бегуна. "
-                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с СЕГОДНЯШНЕЙ даты ({today_str}), а завтрашний день должен быть ({tomorrow_str}). "
+                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
                      f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
-                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {today_str} для тренировок, это критически важно! "
+                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
                      f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
                      f"Учитывай цель бегуна, его физическую подготовку и еженедельный объем. "
                      f"Отвечай только в указанном JSON формате на русском языке."
@@ -278,25 +309,56 @@ class OpenAIService:
             # Объединяем все части подсказки
             prompt = profile_info + training_summary + instructions
             
-            # Получаем текущую дату и последующие даты для тренировок
+            # Получаем даты для тренировок
             import pytz
             
-            # Генерируем все 7 дат для плана, используя Московское время (UTC+3)
-            # Поскольку сервер работает в UTC, а пользователь, скорее всего, находится в России (UTC+3)
+            # Используем Московское время (UTC+3)
             moscow_tz = pytz.timezone('Europe/Moscow')
-            today = datetime.now(pytz.UTC).astimezone(moscow_tz)
-            logging.info(f"Текущая дата и время для продолжения плана (Москва): {today.strftime('%d.%m.%Y %H:%M:%S')}")
             
+            # Проверяем, указал ли пользователь дату начала тренировок в профиле
+            user_start_date = runner_profile.get('training_start_date_text', runner_profile.get('training_start_date', None))
+            
+            # Попытка распарсить дату начала тренировок
+            start_date = None
+            
+            if user_start_date and user_start_date.lower() != 'сегодня':
+                try:
+                    # Попробуем распарсить дату в формате "ДД.ММ.ГГГГ"
+                    logging.info(f"Продолжение плана - пытаемся распарсить дату начала: {user_start_date}")
+                    
+                    # Обрабатываем несколько возможных форматов
+                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
+                    
+                    for fmt in formats:
+                        try:
+                            start_date = datetime.strptime(user_start_date, fmt)
+                            start_date = moscow_tz.localize(start_date)
+                            logging.info(f"Успешно распарсили дату продолжения: {start_date.strftime('%d.%m.%Y')}")
+                            break
+                        except ValueError:
+                            continue
+                except Exception as e:
+                    logging.error(f"Ошибка при парсинге даты начала продолжения: {e}")
+            
+            # Если не удалось распарсить дату или она не была указана, используем текущую дату
+            if not start_date:
+                start_date = datetime.now(pytz.UTC).astimezone(moscow_tz)
+                logging.info(f"Используем текущую дату для продолжения: {start_date.strftime('%d.%m.%Y')}")
+            
+            logging.info(f"Дата начала продолжения плана: {start_date.strftime('%d.%m.%Y %H:%M:%S')}")
+            
+            # Генерируем все 7 дат для плана
             dates = []
             for i in range(7):
-                date = today + timedelta(days=i)
+                date = start_date + timedelta(days=i)
                 dates.append(date.strftime("%d.%m.%Y"))
             
-            today_str = dates[0]
-            tomorrow_str = dates[1]
+            # Для промпта OpenAI используем первый и второй день
+            first_day_str = dates[0]
+            second_day_str = dates[1]
             
             logging.info(f"Сгенерированные даты для продолжения плана: {dates}")
-            logging.info(f"Сегодня: {today_str}, завтра: {tomorrow_str}")
+            logging.info(f"Первый день: {first_day_str}, второй день: {second_day_str}")
             
             # Вызываем API OpenAI
             response = self.client.chat.completions.create(
@@ -305,9 +367,9 @@ class OpenAIService:
                     {"role": "system", "content": 
                      f"Ты опытный беговой тренер. Твоя задача - создать продолжение персонализированного плана "
                      f"тренировок на 7 дней, основываясь на профиле бегуна и на результатах предыдущих тренировок. "
-                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с СЕГОДНЯШНЕЙ даты ({today_str}), а завтрашний день должен быть ({tomorrow_str}). "
+                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
                      f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
-                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {today_str} для тренировок, это критически важно! "
+                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
                      f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
                      f"Учитывай, что бегун стал сильнее после завершения предыдущего плана, поэтому новый план должен "
                      f"быть более интенсивным, с увеличенным километражем и сложностью. "
