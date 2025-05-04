@@ -257,6 +257,11 @@ class OpenAIService:
             Dictionary containing a new training plan for 7 days
         """
         try:
+            logging.info("Starting generate_training_plan_continuation")
+            logging.info(f"Runner profile ID: {runner_profile.get('id', 'Unknown')}")
+            logging.info(f"Completed distances: {completed_distances} km")
+            logging.info(f"Current plan: {current_plan.get('id', 'Unknown')}")
+            
             # Проверяем, как быстро пользователь выполнил предыдущий план
             from datetime import datetime, timedelta
             
@@ -264,18 +269,27 @@ class OpenAIService:
             rapid_completion = False
             days_passed = 7  # По умолчанию считаем, что план выполнялся неделю
             try:
+                logging.info("Checking plan completion timing")
                 if current_plan and 'id' in current_plan:
                     # Получаем время создания плана
                     plan_creation_time = current_plan.get('created_at')
+                    logging.info(f"Plan creation time (raw): {plan_creation_time}")
+                    
                     if plan_creation_time:
                         # Преобразуем строку времени в объект datetime
                         if isinstance(plan_creation_time, str):
-                            plan_creation_time = datetime.strptime(plan_creation_time, "%Y-%m-%d %H:%M:%S")
+                            try:
+                                plan_creation_time = datetime.strptime(plan_creation_time, "%Y-%m-%d %H:%M:%S")
+                                logging.info(f"Parsed plan creation time: {plan_creation_time}")
+                            except ValueError as e:
+                                logging.error(f"Error parsing creation time: {e}")
+                                plan_creation_time = datetime.now() - timedelta(days=7)  # Fallback
                         
                         # Текущее время с учетом часового пояса Москвы
                         import pytz
                         moscow_tz = pytz.timezone('Europe/Moscow')
                         current_time = datetime.now(pytz.UTC).astimezone(moscow_tz)
+                        logging.info(f"Current time: {current_time}")
                         
                         # Рассчитываем разницу во времени
                         # Если plan_creation_time не имеет информации о часовом поясе, делаем его наивным
@@ -285,10 +299,14 @@ class OpenAIService:
                         
                         time_difference = current_time_naive - plan_creation_time
                         days_passed = time_difference.days
+                        logging.info(f"Days passed since plan creation: {days_passed}")
                         
                         # Если план был выполнен менее чем за 3 дня, считаем это быстрым выполнением
                         if days_passed < 3:
                             rapid_completion = True
+                            logging.info("Rapid completion detected!")
+                else:
+                    logging.warning("Current plan doesn't have ID or is None")
             except Exception as e:
                 logging.warning(f"Error checking plan completion timing: {e}")
             
@@ -433,25 +451,31 @@ class OpenAIService:
             logging.info(f"Первый день: {first_day_str}, второй день: {second_day_str}")
             
             # Вызываем API OpenAI
-            response = self.client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {"role": "system", "content": 
-                     f"Ты опытный беговой тренер. Твоя задача - создать продолжение персонализированного плана "
-                     f"тренировок на 7 дней, основываясь на профиле бегуна и на результатах предыдущих тренировок. "
-                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
-                     f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
-                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
-                     f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
-                     f"Учитывай, что бегун стал сильнее после завершения предыдущего плана, поэтому новый план должен "
-                     f"быть более интенсивным, с увеличенным километражем и сложностью. "
-                     f"Отвечай только в указанном JSON формате на русском языке."
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.7
-            )
+            logging.info("Calling OpenAI API for plan continuation")
+            try:
+                response = self.client.chat.completions.create(
+                    model=MODEL,
+                    messages=[
+                        {"role": "system", "content": 
+                         f"Ты опытный беговой тренер. Твоя задача - создать продолжение персонализированного плана "
+                         f"тренировок на 7 дней, основываясь на профиле бегуна и на результатах предыдущих тренировок. "
+                         f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
+                         f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
+                         f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
+                         f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
+                         f"Учитывай, что бегун стал сильнее после завершения предыдущего плана, поэтому новый план должен "
+                         f"быть более интенсивным, с увеличенным километражем и сложностью. "
+                         f"Отвечай только в указанном JSON формате на русском языке."
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7
+                )
+                logging.info("OpenAI API response received successfully")
+            except Exception as e:
+                logging.error(f"Error calling OpenAI API: {e}")
+                raise
             
             # Разбираем и возвращаем ответ
             plan_json = json.loads(response.choices[0].message.content)

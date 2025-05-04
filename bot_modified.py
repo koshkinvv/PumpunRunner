@@ -1215,11 +1215,24 @@ async def callback_query_handler(update, context):
                 )
             
             # Получаем сервис OpenAI и генерируем продолжение плана
-            openai_service = OpenAIService()
-            new_plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
-            
-            # Сохраняем новый план в базу данных
-            new_plan_id = TrainingPlanManager.save_training_plan(db_user_id, new_plan)
+            try:
+                logging.info("Инициализация OpenAIService для продолжения плана")
+                openai_service = OpenAIService()
+                
+                logging.info(f"Вызов generate_training_plan_continuation с параметрами: profile_id={profile['id']}, total_distance={total_distance}")
+                new_plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
+                logging.info(f"Получен новый план: {new_plan.get('plan_name', 'Неизвестный план')}")
+                
+                # Сохраняем новый план в базу данных
+                logging.info(f"Сохранение нового плана в БД для пользователя {db_user_id}")
+                new_plan_id = TrainingPlanManager.save_training_plan(db_user_id, new_plan)
+                logging.info(f"Новый план сохранен с ID: {new_plan_id}")
+            except Exception as e:
+                logging.error(f"Ошибка при генерации или сохранении плана: {e}")
+                await query.message.reply_text(
+                    "❌ Произошла ошибка при генерации нового плана тренировок. Пожалуйста, попробуйте позже."
+                )
+                return
             
             if not new_plan_id:
                 await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
