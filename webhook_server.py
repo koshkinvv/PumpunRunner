@@ -51,13 +51,21 @@ def webhook():
             update_data = request.get_json()
             logger.debug(f"Получено обновление: {update_data}")
             
-            # Преобразуем JSON в объект Update
-            update = Update.de_json(update_data, bot.bot)
-            
-            # Передаем обновление в диспетчер - используем asyncio для запуска асинхронной функции
-            import asyncio
-            asyncio.run(bot.process_update(update))
-            return jsonify({"status": "ok"})
+            try:
+                # Преобразуем JSON в объект Update
+                update = Update.de_json(update_data, bot.bot)
+                
+                # Используем синхронный метод для обработки обновления
+                bot.process_update_sync(update)
+                
+                # ПРИМЕЧАНИЕ: Мы перешли на синхронную обработку, так как асинхронная
+                # вызывала проблемы с инициализацией Application в отдельных потоках
+                
+                # Сразу возвращаем успешный ответ Telegram
+                return jsonify({"status": "ok"})
+            except Exception as e:
+                logger.error(f"Ошибка при обработке сообщения: {e}")
+                return jsonify({"status": "error", "message": f"Ошибка обработки сообщения: {str(e)}"}), 500
         else:
             logger.warning(f"Получен неподдерживаемый content-type: {request.headers.get('content-type')}")
             return jsonify({"status": "error", "message": "Content-type должен быть application/json"}), 400
