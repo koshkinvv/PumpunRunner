@@ -10,6 +10,8 @@ import subprocess
 import logging
 import signal
 import psutil
+import traceback
+from datetime import datetime
 
 # Настройка логирования
 logging.basicConfig(
@@ -163,20 +165,91 @@ def start_bot_with_monitor():
         return True
     except Exception as e:
         logger.error(f"Ошибка при запуске бота с монитором: {e}")
-        import traceback
         logger.error(traceback.format_exc())
         return False
+
+def cleanup_orphaned_log_files():
+    """Очищает старые файлы логов для избежания переполнения хранилища."""
+    try:
+        logger.info("Проверка старых файлов логов...")
+        if not os.path.exists("logs"):
+            return
+            
+        # Получаем список файлов логов
+        log_files = [f for f in os.listdir("logs") if f.endswith(".log")]
+        if not log_files:
+            return
+            
+        # Оставляем только 50 последних файлов, остальные удаляем
+        if len(log_files) > 50:
+            # Сортируем по времени создания
+            log_files.sort(key=lambda f: os.path.getctime(os.path.join("logs", f)))
+            
+            # Удаляем старые файлы
+            for old_file in log_files[:-50]:
+                old_path = os.path.join("logs", old_file)
+                logger.info(f"Удаление старого файла лога: {old_path}")
+                os.remove(old_path)
+    except Exception as e:
+        logger.error(f"Ошибка при очистке старых файлов логов: {e}")
 
 def main():
     """Основная функция скрипта."""
     logger.info("Запуск скрипта запуска бота с монитором")
     
-    success = start_bot_with_monitor()
-    if success:
-        logger.info("Бот с монитором успешно запущен. Выход из скрипта запуска.")
-    else:
-        logger.error("Не удалось запустить бота с монитором")
-        sys.exit(1)
+    # Очищаем старые файлы логов
+    cleanup_orphaned_log_files()
+    
+    # Создаем файл статуса здоровья, если он не существует
+    if not os.path.exists("bot_health.txt"):
+        try:
+            with open("bot_health.txt", "w") as f:
+                f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception as e:
+            logger.error(f"Ошибка при создании файла здоровья: {e}")
+    
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            success = start_bot_with_monitor()
+            if success:
+                logger.info("Бот с монитором успешно запущен. Выход из скрипта запуска.")
+                # Регистрируем обработчик сигналов для корректного завершения
+                def signal_handler(sig, frame):
+                    logger.info(f"Получен сигнал {sig}, завершаем все процессы...")
+                    kill_running_bots()
+                    kill_monitors()
+                    sys.exit(0)
+                
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
+                
+                # Ждем, пока скрипт не будет прерван
+                while True:
+                    time.sleep(60)
+            else:
+                logger.error(f"Не удалось запустить бота с монитором (попытка {attempt}/{max_attempts})")
+                
+                # Ждем перед следующей попыткой
+                if attempt < max_attempts:
+                    wait_time = 30 * attempt  # 30, 60, 90 секунд...
+                    logger.info(f"Повторная попытка через {wait_time} секунд...")
+                    time.sleep(wait_time)
+                else:
+                    logger.critical("Превышено максимальное количество попыток запуска")
+                    sys.exit(1)
+                    
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при запуске (попытка {attempt}/{max_attempts}): {e}")
+            
+            # Ждем перед следующей попыткой
+            if attempt < max_attempts:
+                wait_time = 30 * attempt
+                logger.info(f"Повторная попытка через {wait_time} секунд...")
+                time.sleep(wait_time)
+            else:
+                logger.critical("Превышено максимальное количество попыток запуска")
+                sys.exit(1)
 
 if __name__ == "__main__":
     main()
