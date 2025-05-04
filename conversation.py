@@ -606,10 +606,17 @@ class RunnerProfileConversation:
         # Переходим к выбору часового пояса
         reply_markup = ReplyKeyboardMarkup(
             [
-                ['Москва (Europe/Moscow)'],
-                ['Санкт-Петербург (Europe/Moscow)'],
+                ['Москва, Санкт-Петербург (Europe/Moscow)'],
+                ['Калининград (Europe/Kaliningrad)'],
+                ['Самара (Europe/Samara)'],
                 ['Екатеринбург (Asia/Yekaterinburg)'],
-                ['Новосибирск (Asia/Novosibirsk)']
+                ['Омск (Asia/Omsk)'],
+                ['Красноярск (Asia/Krasnoyarsk)'],
+                ['Иркутск (Asia/Irkutsk)'],
+                ['Якутск (Asia/Yakutsk)'],
+                ['Владивосток (Asia/Vladivostok)'],
+                ['Магадан (Asia/Magadan)'],
+                ['Камчатка (Asia/Kamchatka)']
             ],
             one_time_keyboard=True,
             resize_keyboard=True
@@ -617,7 +624,7 @@ class RunnerProfileConversation:
         
         await update.message.reply_text(
             "В каком часовом поясе вы находитесь? Это нужно для отправки напоминаний о тренировках "
-            "в удобное для вас время.",
+            "в 20:00 по вашему местному времени.",
             reply_markup=reply_markup
         )
         return STATES['TIMEZONE']
@@ -646,10 +653,17 @@ class RunnerProfileConversation:
             # Часовой пояс не валидный, предлагаем выбрать из списка
             reply_markup = ReplyKeyboardMarkup(
                 [
-                    ['Москва (Europe/Moscow)'],
-                    ['Санкт-Петербург (Europe/Moscow)'],
+                    ['Москва, Санкт-Петербург (Europe/Moscow)'],
+                    ['Калининград (Europe/Kaliningrad)'],
+                    ['Самара (Europe/Samara)'],
                     ['Екатеринбург (Asia/Yekaterinburg)'],
-                    ['Новосибирск (Asia/Novosibirsk)']
+                    ['Омск (Asia/Omsk)'],
+                    ['Красноярск (Asia/Krasnoyarsk)'],
+                    ['Иркутск (Asia/Irkutsk)'],
+                    ['Якутск (Asia/Yakutsk)'],
+                    ['Владивосток (Asia/Vladivostok)'],
+                    ['Магадан (Asia/Magadan)'],
+                    ['Камчатка (Asia/Kamchatka)']
                 ],
                 one_time_keyboard=True,
                 resize_keyboard=True
