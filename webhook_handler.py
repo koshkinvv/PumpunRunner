@@ -814,18 +814,28 @@ def setup_webhook(replit_domain=None):
     """
     try:
         if not replit_domain:
-            replit_domain = os.environ.get("REPL_SLUG", "") + "." + os.environ.get("REPL_OWNER", "") + ".repl.co"
-            if "REPLIT_CLUSTER" in os.environ:
-                # Новый формат домена для Replit Reserved VMs
-                import requests
-                try:
-                    r = requests.get('https://replit.com/~')
-                    if r.status_code == 200 and 'X-Replit-Cluster-Url' in r.headers:
-                        cluster_url = r.headers['X-Replit-Cluster-Url']
-                        if cluster_url:
-                            replit_domain = cluster_url.lstrip('https://').rstrip('/')
-                except:
-                    logger.error("Не удалось получить URL кластера Replit Reserved VM")
+            # Используем домен сервера напрямую
+            import socket
+            try:
+                # Получаем hostname текущего сервера
+                hostname = socket.gethostname()
+                # Получаем IP адрес
+                ip = socket.gethostbyname(hostname)
+                logger.info(f"Обнаружен hostname: {hostname}, IP: {ip}")
+                # Используем текущий хост
+                import os
+                if "REPL_SLUG" in os.environ and "REPL_OWNER" in os.environ:
+                    replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+                else:
+                    replit_domain = "workspace.replit.app"
+            except Exception as e:
+                logger.error(f"Ошибка при определении hostname: {e}")
+                # Fallback домен
+                import os
+                if "REPL_SLUG" in os.environ and "REPL_OWNER" in os.environ:
+                    replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+                else:
+                    replit_domain = "workspace.replit.app"
             
         # Формируем webhook URL
         if replit_domain:

@@ -437,13 +437,18 @@ def main():
                     # Импортируем asyncio
                     import asyncio
                     
-                    # Инициализируем приложение и webhook
-                    # Сначала инициализируем приложение синхронно
-                    application.initialize_sync()
-                    
-                    # Затем напрямую вызываем setup_webhook без await
-                    replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
-                    setup_webhook(replit_domain)
+                    # Инициализируем webhook без асинхронности
+                    try:
+                        # Напрямую вызываем setup_webhook с доменом Replit
+                        replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+                        logging.info(f"Использую домен для webhook: {replit_domain}")
+                        setup_result = setup_webhook(replit_domain)
+                        if setup_result:
+                            logging.info("Webhook успешно настроен")
+                        else:
+                            logging.error("Не удалось настроить webhook")
+                    except Exception as e:
+                        logging.error(f"Ошибка при настройке webhook: {e}", exc_info=True)
                     
                     # Маршруты webhook уже зарегистрированы в app.py
                     # register_webhook_routes(app, application)  # Закомментировано, чтобы избежать двойной регистрации
