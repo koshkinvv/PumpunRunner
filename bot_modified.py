@@ -764,6 +764,109 @@ async def callback_query_handler(update, context):
             logging.error(f"Error handling none_match button: {e}")
             await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
     
+    # Обработка кнопки корректировки плана
+    elif query.data.startswith("adjust_plan_"):
+        try:
+            # Разбираем callback data: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance}
+            parts = query.data.split('_')
+            
+            # Проверяем, правильный ли формат
+            if len(parts) < 6:
+                await query.message.reply_text("❌ Неверный формат callback_data для корректировки плана.")
+                return
+            
+            # Извлекаем параметры
+            plan_id = int(parts[2])
+            day_num = int(parts[3])
+            actual_distance = float(parts[4])
+            planned_distance = float(parts[5])
+            
+            # Получаем профиль бегуна
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            if not runner_profile:
+                await query.message.reply_text("❌ Не удалось получить профиль бегуна.")
+                return
+            
+            # Получаем текущий план
+            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            if not current_plan or current_plan['id'] != plan_id:
+                await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
+                return
+            
+            # Отправляем сообщение о начале корректировки
+            await query.message.reply_text(
+                "🔄 Корректирую ваш план тренировок с учетом фактического выполнения...\n"
+                "Это может занять некоторое время."
+            )
+            
+            # Создаем инстанс OpenAI сервиса и корректируем план
+            openai_service = OpenAIService()
+            adjusted_plan = openai_service.adjust_training_plan(
+                runner_profile,
+                current_plan['plan_data'],
+                day_num,
+                planned_distance,
+                actual_distance
+            )
+            
+            if not adjusted_plan:
+                await query.message.reply_text("❌ Не удалось скорректировать план. Пожалуйста, попробуйте позже.")
+                return
+            
+            # Обновляем план в базе данных
+            success = TrainingPlanManager.update_training_plan(db_user_id, plan_id, adjusted_plan)
+            
+            if not success:
+                await query.message.reply_text("❌ Не удалось сохранить скорректированный план.")
+                return
+            
+            # Получаем обновленный план
+            updated_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            
+            # Отправляем информацию о скорректированном плане
+            await query.message.reply_text(
+                f"✅ Ваш план тренировок успешно скорректирован!\n\n"
+                f"*{updated_plan['plan_data']['plan_name']}*\n\n"
+                f"{updated_plan['plan_data']['plan_description']}\n\n"
+                f"📋 Вот оставшиеся дни вашего скорректированного плана:",
+                parse_mode='Markdown'
+            )
+            
+            # Получаем обработанные тренировки
+            completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+            
+            # Отправляем только оставшиеся (не выполненные и не отмененные) дни тренировок
+            for idx, day in enumerate(updated_plan['plan_data']['training_days']):
+                training_day_num = idx + 1
+                
+                # Пропускаем уже обработанные дни
+                if training_day_num in completed or training_day_num in canceled:
+                    continue
+                
+                # Создаем сообщение с днем тренировки
+                training_type = day.get('training_type') or day.get('type', 'Не указан')
+                
+                day_message = (
+                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {training_type}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
+                ])
+                
+                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
+        except Exception as e:
+            logging.error(f"Error adjusting plan: {e}")
+            await query.message.reply_text("❌ Произошла ошибка при корректировке плана.")
+    
     # Обработка кнопки "Продолжить тренировки"
     elif query.data.startswith('continue_plan_'):
         # Формат: continue_plan_PLAN_ID
@@ -945,6 +1048,49 @@ async def handle_photo(update, context):
         completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
         canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
         processed_days = completed_days + canceled_days
+           
+        # Check if this is a running workout or another type of workout
+        workout_type = workout_data.get("тип_тренировки", "").lower()
+        
+        # Check common running workout types in Russian and English
+        running_types = ["бег", "пробежка", "run", "running", "jogging", "бег трусцой"]
+        is_running_workout = any(run_type in workout_type for run_type in running_types) if workout_type else True
+        
+        if workout_type and not is_running_workout:
+            # Create buttons for marking training as completed manually
+            buttons = []
+            for idx, day in enumerate(training_days):
+                day_num = idx + 1
+                if day_num not in processed_days:
+                    buttons.append([InlineKeyboardButton(
+                        f"День {day_num}: {day['day']} ({day['date']}) - {day['distance']}",
+                        callback_data=f"complete_{plan_id}_{day_num}"
+                    )])
+                    
+            # Only add buttons if we have some unprocessed days
+            if buttons:
+                keyboard = InlineKeyboardMarkup(buttons)
+                
+                await update.message.reply_text(
+                    f"⚠️ Обнаружена тренировка типа *{workout_type}*!\n\n"
+                    f"В данный момент я могу обрабатывать только беговые тренировки. "
+                    f"Поддержка других типов тренировок (плавание, велосипед, силовые и т.д.) "
+                    f"будет добавлена в ближайшее время.\n\n"
+                    f"Вы можете загрузить скриншот беговой тренировки или выбрать день тренировки, "
+                    f"который хотите отметить как выполненный:",
+                    parse_mode='Markdown',
+                    reply_markup=keyboard
+                )
+            else:
+                await update.message.reply_text(
+                    f"⚠️ Обнаружена тренировка типа *{workout_type}*!\n\n"
+                    f"В данный момент я могу обрабатывать только беговые тренировки. "
+                    f"Поддержка других типов тренировок (плавание, велосипед, силовые и т.д.) "
+                    f"будет добавлена в ближайшее время.\n\n"
+                    f"Пожалуйста, загрузите скриншот беговой тренировки.",
+                    parse_mode='Markdown'
+                )
+            return
         
         # Find a matching training day
         matching_day_idx, matching_score = analyzer.find_matching_training(training_days, workout_data)
@@ -991,14 +1137,66 @@ async def handle_photo(update, context):
                 except (ValueError, TypeError):
                     logging.warning(f"Could not update weekly volume with distance: {workout_distance}")
                 
-                await update.message.reply_text(
+                # Extract planned distance
+                planned_distance = 0
+                try:
+                    # Extract numeric value from distance string (e.g., "5 км" -> 5)
+                    import re
+                    distance_match = re.search(r'(\d+(\.\d+)?)', matched_day['distance'])
+                    if distance_match:
+                        planned_distance = float(distance_match.group(1))
+                except Exception as e:
+                    logging.warning(f"Error extracting planned distance: {e}")
+                
+                # Check if actual distance significantly differs from planned distance
+                actual_distance = float(workout_distance)
+                diff_percent = 0
+                if planned_distance > 0:
+                    diff_percent = abs(actual_distance - planned_distance) / planned_distance * 100
+                
+                # Create the acknowledgment message
+                training_completion_msg = (
                     f"{ack_message}🎉 Тренировка успешно сопоставлена с планом!\n\n"
                     f"День {matched_day_num}: {matched_day['day']} ({matched_day['date']})\n"
                     f"Тип: {matched_day['training_type']}\n"
-                    f"Плановая дистанция: {matched_day['distance']}\n\n"
-                    f"Тренировка отмечена как выполненная! 👍",
-                    parse_mode='Markdown'
+                    f"Плановая дистанция: {matched_day['distance']}\n"
+                    f"Фактическая дистанция: {workout_distance} км\n\n"
                 )
+                
+                # If difference is more than 20%
+                if diff_percent > 20 and training_days and len(training_days) > matched_day_num:
+                    # Add a message about the significant difference
+                    if actual_distance > planned_distance:
+                        training_completion_msg += (
+                            f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% больше запланированной!\n"
+                            f"Это может указывать на то, что ваш текущий план недостаточно интенсивен для вас.\n\n"
+                        )
+                    else:
+                        training_completion_msg += (
+                            f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% меньше запланированной!\n"
+                            f"Это может указывать на то, что ваш текущий план слишком интенсивен для вас.\n\n"
+                        )
+                    
+                    # Offer to adjust the plan
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📝 Скорректировать план", callback_data=f"adjust_plan_{plan_id}_{matched_day_num}_{actual_distance}_{planned_distance}")]
+                    ])
+                    
+                    training_completion_msg += "Хотите скорректировать оставшиеся тренировки с учетом вашего фактического выполнения?"
+                    
+                    await update.message.reply_text(
+                        training_completion_msg,
+                        parse_mode='Markdown',
+                        reply_markup=keyboard
+                    )
+                else:
+                    # No significant difference or no remaining days
+                    training_completion_msg += f"Тренировка отмечена как выполненная! 👍"
+                    
+                    await update.message.reply_text(
+                        training_completion_msg,
+                        parse_mode='Markdown'
+                    )
                 
                 # Check if all trainings are now completed
                 all_processed_days = TrainingPlanManager.get_all_processed_trainings(db_user_id, plan_id)

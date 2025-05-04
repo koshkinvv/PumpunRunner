@@ -17,6 +17,46 @@ class TrainingPlanManager:
             return None
     
     @staticmethod
+    def update_training_plan(user_id, plan_id, plan_data):
+        """
+        Update an existing training plan in the database.
+        
+        Args:
+            user_id: Database user ID
+            plan_id: ID of the plan to update
+            plan_data: Dictionary containing the updated training plan
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            connection = TrainingPlanManager.get_connection()
+            cursor = connection.cursor()
+            
+            # Convert plan data to JSON string
+            plan_json = json.dumps(plan_data, ensure_ascii=False)
+            
+            # Update the plan
+            query = """
+                UPDATE training_plans
+                SET plan_data = %s, updated_at = NOW()
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+            """
+            cursor.execute(query, (plan_json, plan_id, user_id))
+            result = cursor.fetchone()
+            
+            # Commit the changes
+            connection.commit()
+            
+            return result is not None
+        except Exception as e:
+            logging.error(f"Error updating training plan: {e}")
+            return False
+        finally:
+            if connection:
+                connection.close()
+                
     def save_training_plan(user_id, plan_data):
         """
         Save a training plan to the database.
