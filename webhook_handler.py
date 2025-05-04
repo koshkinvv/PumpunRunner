@@ -320,9 +320,17 @@ def handle_callback_query(application, update_data):
                     
                     # Проверяем, выполнена или отменена ли тренировка
                     if day_num in completed_days:
+                        # Добавляем метку "ВЫПОЛНЕНО" в заголовок тренировки
+                        day_info_title_end = day_info.find('\n')
+                        if day_info_title_end > 0:
+                            day_info = day_info[:day_info_title_end] + " - ВЫПОЛНЕНО" + day_info[day_info_title_end:]
                         send_telegram_message(chat_id, f"✅ {day_info}", parse_mode="Markdown")
                         has_completed = True
                     elif day_num in canceled_days:
+                        # Добавляем метку "ОТМЕНЕНО" в заголовок тренировки
+                        day_info_title_end = day_info.find('\n')
+                        if day_info_title_end > 0:
+                            day_info = day_info[:day_info_title_end] + " - ОТМЕНЕНО" + day_info[day_info_title_end:]
                         send_telegram_message(chat_id, f"❌ {day_info}", parse_mode="Markdown")
                         has_completed = True
                     else:
@@ -422,7 +430,8 @@ def handle_callback_query(application, update_data):
                                     except:
                                         logger.error(f"Не удалось преобразовать дистанцию '{distance}' в число")
                         
-                        answer_callback_query(callback_query_id, "✅ Тренировка отмечена как выполненная!")
+                        # Просто подтверждаем действие без текстового сообщения
+                        answer_callback_query(callback_query_id)
                         
                         # Обновляем сообщение, заменяя кнопки на отметку о выполнении
                         message_id = callback_query['message']['message_id']
@@ -473,7 +482,8 @@ def handle_callback_query(application, update_data):
                     success = TrainingPlanManager.mark_training_canceled(db_user_id, plan_id, day_num)
                     
                     if success:
-                        answer_callback_query(callback_query_id, "❌ Тренировка отменена.")
+                        # Просто подтверждаем действие без текстового сообщения
+                        answer_callback_query(callback_query_id)
                         
                         # Обновляем сообщение, заменяя кнопки на отметку об отмене
                         message_id = callback_query['message']['message_id']
