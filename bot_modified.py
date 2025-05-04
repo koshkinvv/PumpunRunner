@@ -1309,119 +1309,31 @@ async def callback_query_handler(update, context):
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
-            # Подробное логирование для диагностики
-            logging.info(f"[ADJUST PLAN] Получен callback: {query.data}")
-            logging.info(f"[ADJUST PLAN] Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
+            # Сильно упрощенная обработка для диагностики
+            logging.warning(f"===== НАЖАТА КНОПКА КОРРЕКТИРОВКИ ПЛАНА =====")
+            logging.warning(f"Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
+            logging.warning(f"Callback data: {query.data}")
             
-            # Отправляем уведомление пользователю о начале обработки
-            await query.message.reply_text("⏳ Начинаю обработку запроса...")
-            
-            # Разбираем callback data: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance}
+            # Извлекаем параметры для отображения
             parts = query.data.split('_')
-            logging.info(f"[ADJUST PLAN] Разбитые части: {parts}, длина: {len(parts)}")
             
-            # Проверяем, правильный ли формат - должно быть минимум 5 частей
-            if len(parts) < 5:
-                logging.error(f"[ADJUST PLAN] Неверный формат callback_data: {query.data}, количество частей: {len(parts)}")
-                await query.message.reply_text("❌ Неверный формат callback_data для корректировки плана.")
-                return
-                        
-            # Извлекаем параметры
-            plan_id = int(parts[2])
-            day_num = int(parts[3])
-            actual_distance = float(parts[4])
+            # Отладочная информация о разбитом callback_data
+            debug_text = f"Получен callback: {query.data}\n"
+            debug_text += f"Количество частей: {len(parts)}\n"
+            debug_text += f"Части: {', '.join(parts)}\n\n"
             
-            # Проверяем наличие параметра planned_distance
-            if len(parts) >= 6:
-                planned_distance = float(parts[5])
-            else:
-                # Если planned_distance отсутствует, используем значение по умолчанию
-                logging.warning(f"[ADJUST PLAN] Отсутствует planned_distance в callback_data, используем значение по умолчанию")
-                planned_distance = 0.0
-            
-            logging.info(f"[ADJUST PLAN] Извлеченные параметры: plan_id={plan_id}, day_num={day_num}, actual_distance={actual_distance}, planned_distance={planned_distance}")
-            
-            # Получаем профиль бегуна
-            runner_profile = DBManager.get_runner_profile(db_user_id)
-            if not runner_profile:
-                await query.message.reply_text("❌ Не удалось получить профиль бегуна.")
-                return
-            
-            # Получаем текущий план
-            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-            if not current_plan or current_plan['id'] != plan_id:
-                await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
-                return
-            
-            # Отправляем сообщение о начале корректировки
+            # Сразу отвечаем пользователю, чтобы убедиться, что callback работает
             await query.message.reply_text(
-                "🔄 Корректирую ваш план тренировок с учетом фактического выполнения...\n"
-                "Это может занять некоторое время."
+                f"✅ Получена команда корректировки плана!\n\n"
+                f"{debug_text}"
+                f"В данный момент функция находится в режиме отладки."
             )
             
-            # Создаем инстанс OpenAI сервиса и корректируем план
-            openai_service = OpenAIService()
-            adjusted_plan = openai_service.adjust_training_plan(
-                runner_profile,
-                current_plan['plan_data'],
-                day_num,
-                planned_distance,
-                actual_distance
+            # Отправляем еще одно сообщение для уверенности, что связь работает
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="Обработчик кнопки 'Скорректировать план' успешно вызван. Команда получена."
             )
-            
-            if not adjusted_plan:
-                await query.message.reply_text("❌ Не удалось скорректировать план. Пожалуйста, попробуйте позже.")
-                return
-            
-            # Обновляем план в базе данных
-            success = TrainingPlanManager.update_training_plan(db_user_id, plan_id, adjusted_plan)
-            
-            if not success:
-                await query.message.reply_text("❌ Не удалось сохранить скорректированный план.")
-                return
-            
-            # Получаем обновленный план
-            updated_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-            
-            # Отправляем информацию о скорректированном плане
-            await query.message.reply_text(
-                f"✅ Ваш план тренировок успешно скорректирован!\n\n"
-                f"*{updated_plan['plan_data']['plan_name']}*\n\n"
-                f"{updated_plan['plan_data']['plan_description']}\n\n"
-                f"📋 Вот оставшиеся дни вашего скорректированного плана:",
-                parse_mode='Markdown'
-            )
-            
-            # Получаем обработанные тренировки
-            completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
-            canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
-            
-            # Отправляем только оставшиеся (не выполненные и не отмененные) дни тренировок
-            for idx, day in enumerate(updated_plan['plan_data']['training_days']):
-                training_day_num = idx + 1
-                
-                # Пропускаем уже обработанные дни
-                if training_day_num in completed or training_day_num in canceled:
-                    continue
-                
-                # Создаем сообщение с днем тренировки
-                training_type = day.get('training_type') or day.get('type', 'Не указан')
-                
-                day_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {training_type}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
-                
-                # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
-                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
-                ])
-                
-                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
             
         except Exception as e:
             logging.error(f"Error adjusting plan: {e}")
