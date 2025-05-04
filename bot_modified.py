@@ -414,8 +414,8 @@ async def callback_query_handler(update, context):
                     runner_profile = DBManager.get_runner_profile(db_user_id)
                     if runner_profile:
                         # Создаем кнопки для корректировки плана или продолжения без изменений
-                        # Используем новый формат: adjust_after_cancel_ID_DAY
-                        adjust_callback = f"adjust_{plan_id}_{day_number}"  # Исправлено: используем более короткий формат для совместимости
+                        # Используем единый формат для всех кнопок корректировки плана
+                        adjust_callback = f"adjust_plan_{plan_id}_{day_number}_0_0"  # Используем тот же формат, что и везде, с нулями вместо расстояний
                         logging.info(f"Создаем кнопку с callback_data: {adjust_callback}")
                         
                         keyboard = InlineKeyboardMarkup([
