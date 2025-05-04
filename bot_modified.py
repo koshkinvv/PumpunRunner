@@ -549,10 +549,45 @@ async def callback_query_handler(update, context):
                 # Расчет общего пройденного расстояния
                 total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id) 
                 
+                # Добавляем логирование для отладки
+                logging.info(f"Вычисленная дистанция: {total_distance:.1f} км")
+                
+                # Убедимся, что дистанция не может быть отрицательной или нулевой
+                if total_distance <= 0:
+                    # Перепроверим расчет дистанции напрямую из плана
+                    try:
+                        # Получаем завершенные дни для текущего плана
+                        completed_training_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                        
+                        recalculated_distance = 0
+                        for day_num in completed_training_days:
+                            day_idx = day_num - 1
+                            if day_idx < 0 or day_idx >= len(current_plan['plan_data']['training_days']):
+                                continue
+                            
+                            day_data = current_plan['plan_data']['training_days'][day_idx]
+                            distance_str = day_data.get('distance', '0 км').split()[0]
+                            try:
+                                distance = float(distance_str)
+                                recalculated_distance += distance
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        if recalculated_distance > 0:
+                            total_distance = recalculated_distance
+                            logging.info(f"Пересчитали дистанцию: {total_distance:.1f} км")
+                    except Exception as e:
+                        logging.error(f"Ошибка при перерасчете дистанции: {e}")
+                
+                # Убедимся, что прогресс не может быть меньше или равен нулю
+                progress_display = f" с учетом вашего прогресса ({total_distance:.1f} км)"
+                if total_distance <= 0:
+                    progress_display = ""
+                
                 with open("attached_assets/котик.jpeg", "rb") as photo:
                     await query.message.reply_photo(
                         photo=photo,
-                        caption=f"⏳ Генерирую продолжение плана тренировок с учетом вашего прогресса ({total_distance:.1f} км). Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+                        caption=f"⏳ Генерирую продолжение плана тренировок{progress_display}. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
                     )
                 
                 # Получаем сервис OpenAI и генерируем продолжение плана

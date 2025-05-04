@@ -433,20 +433,30 @@ class TrainingPlanManager:
                 
                 # Calculate total distance
                 total_distance = 0
+                logging.info(f"Расчет дистанции для плана {plan_id}. Завершенные дни: {completed_days}")
+                
                 for day_num in completed_days:
                     day_idx = day_num - 1
                     if day_idx < 0 or day_idx >= len(plan_data.get('training_days', [])):
+                        logging.warning(f"Индекс дня {day_idx} за пределами тренировочных дней")
                         continue
                     
                     day_data = plan_data['training_days'][day_idx]
-                    distance_str = day_data.get('distance', '0 км').split()[0]
+                    distance_raw = day_data.get('distance', '0 км')
+                    logging.info(f"Дистанция для дня {day_num}: '{distance_raw}'")
+                    
                     try:
+                        # Разбиваем строку и берем первое значение (число) перед единицами измерения
+                        distance_str = distance_raw.split()[0].replace(',', '.')
                         distance = float(distance_str)
                         total_distance += distance
-                    except (ValueError, TypeError):
+                        logging.info(f"  Добавлено {distance} км")
+                    except (ValueError, TypeError, IndexError) as e:
                         # Skip if distance cannot be parsed as float
-                        pass
+                        logging.warning(f"  Не удалось распарсить дистанцию '{distance_raw}': {e}")
+                        continue
                 
+                logging.info(f"Итоговая дистанция для плана {plan_id}: {total_distance} км")
                 return total_distance
                 
         except Exception as e:
