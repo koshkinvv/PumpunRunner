@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import TELEGRAM_TOKEN, logging
+from config import TELEGRAM_TOKEN, logging, STATES
 from models import create_tables
 from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
@@ -1036,6 +1036,78 @@ async def callback_query_handler(update, context):
             "Продолжайте следовать своему регулярному плану тренировок!"
         )
     
+    # Обработка кнопки подтверждения обновления профиля
+    elif query.data == "confirm_update_profile":
+        try:
+            # Получаем данные пользователя
+            telegram_id = update.effective_user.id
+            db_user_id = DBManager.get_user_id(telegram_id)
+            
+            if not db_user_id:
+                await query.message.edit_text("❌ Ошибка: пользователь не найден в базе данных.")
+                return
+                
+            # Удаляем текущий профиль пользователя
+            # Здесь используем низкоуровневое подключение, так как DBManager не имеет метода удаления профиля
+            connection = DBManager.get_connection()
+            cursor = connection.cursor()
+            
+            try:
+                cursor.execute("DELETE FROM runner_profiles WHERE user_id = %s", (db_user_id,))
+                connection.commit()
+                
+                # Запускаем процесс создания нового профиля
+                # Инициализируем класс RunnerProfileConversation
+                conversation = RunnerProfileConversation()
+                
+                # Строим клавиатуру для выбора дистанции
+                reply_markup = ReplyKeyboardMarkup(
+                    [['5', '10'], ['21', '42']], 
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                # Отправляем сообщение о начале процесса обновления профиля
+                await query.message.edit_text(
+                    "✅ Ваш прежний профиль успешно удален. "
+                    "Сейчас я проведу вас через процесс создания нового профиля."
+                )
+                
+                await query.message.reply_text(
+                    "Какую дистанцию бега вы планируете пробежать (в километрах)?",
+                    reply_markup=reply_markup
+                )
+                
+                # Запускаем соответствующее состояние разговора через контекст пользователя
+                # Для этого добавим данные в user_data
+                context.user_data['db_user_id'] = db_user_id
+                context.user_data['profile_data'] = {}
+                
+                # Переходим в состояние DISTANCE разговора
+                context.user_data['conversation_state'] = STATES['DISTANCE']
+                
+            except Exception as e:
+                connection.rollback()
+                logging.error(f"Ошибка при удалении профиля: {e}")
+                await query.message.edit_text(
+                    "❌ Произошла ошибка при обновлении профиля. Пожалуйста, попробуйте позже."
+                )
+            finally:
+                cursor.close()
+                connection.close()
+                
+        except Exception as e:
+            logging.error(f"Ошибка при обработке подтверждения обновления профиля: {e}")
+            await query.message.edit_text(
+                "❌ Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже."
+            )
+    
+    # Обработка кнопки отмены обновления профиля
+    elif query.data == "cancel_update_profile":
+        await query.message.edit_text(
+            "✅ Обновление профиля отменено. Ваш текущий профиль остается без изменений."
+        )
+    
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
@@ -1872,10 +1944,20 @@ def setup_bot():
                 )
                 
         elif text == "✏️ Обновить мой профиль":
-            # Начинаем диалог обновления профиля
+            # Выводим предупреждение и предлагаем подтвердить обновление профиля
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Да, обновить профиль", callback_data="confirm_update_profile")],
+                [InlineKeyboardButton("❌ Нет, оставить текущий", callback_data="cancel_update_profile")]
+            ])
+            
             await update.message.reply_text(
-                "Для обновления профиля используйте команду /start. "
-                "Обратите внимание, что это перезапишет ваши текущие данные."
+                "⚠️ *Внимание!* Вы собираетесь обновить свой беговой профиль.\n\n"
+                "Все текущие данные будут удалены, и вам нужно будет заново указать "
+                "дистанцию, дату соревнований, возраст, рост, вес и другие параметры.\n\n"
+                "Ваш текущий план тренировок останется без изменений.\n\n"
+                "Вы уверены, что хотите продолжить?",
+                parse_mode='Markdown',
+                reply_markup=keyboard
             )
     
     # Регистрируем обработчик текстовых сообщений
