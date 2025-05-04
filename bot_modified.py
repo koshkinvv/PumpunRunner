@@ -1776,9 +1776,15 @@ async def handle_photo(update, context):
                     actual_distance = 0
                 
                 diff_percent = 0
-                if planned_distance > 0 and actual_distance > 0:
+                if planned_distance > 0 and actual_distance >= 0:
+                    # Обычный случай - рассчитываем процентную разницу
                     diff_percent = abs(actual_distance - planned_distance) / planned_distance * 100
                     logging.info(f"Вычислена разница между фактической ({actual_distance} км) и плановой ({planned_distance} км) дистанцией: {diff_percent:.2f}%")
+                elif planned_distance == 0 and actual_distance > 0:
+                    # Особый случай - день отдыха (0 км), но пользователь всё равно бегал
+                    # Устанавливаем разницу 100%, чтобы сработало условие корректировки плана
+                    diff_percent = 100.0
+                    logging.info(f"Особый случай: плановая дистанция 0 км, но фактическая {actual_distance} км. Устанавливаем diff_percent = 100%")
                 
                 # Create the acknowledgment message
                 training_completion_msg = (
@@ -1804,7 +1810,12 @@ async def handle_photo(update, context):
                 
                 if diff_percent > 20 and training_days:
                     # Add a message about the significant difference
-                    if actual_distance > planned_distance:
+                    if planned_distance == 0 and actual_distance > 0:
+                        training_completion_msg += (
+                            f"⚠️ Вы бегали {actual_distance} км в день, запланированный как отдых (0 км)!\n"
+                            f"Это может повлиять на ваше восстановление и общую эффективность тренировок.\n\n"
+                        )
+                    elif actual_distance > planned_distance:
                         training_completion_msg += (
                             f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% больше запланированной!\n"
                             f"Это может указывать на то, что ваш текущий план недостаточно интенсивен для вас.\n\n"
