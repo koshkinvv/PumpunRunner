@@ -65,7 +65,7 @@ args = "python main.py"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"
+args = "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile - --timeout 120"
 
 [[ports]]
 localPort = 5000
