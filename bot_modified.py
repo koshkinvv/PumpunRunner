@@ -1526,10 +1526,11 @@ async def handle_photo(update, context):
                 # Проверяем, что: 
                 # 1) разница больше 20%
                 # 2) есть training_days
-                # 3) проверяем остались ли дни в плане
+                # 3) проверяем остались ли дни в плане (для логики отображения кнопок)
+                # Всегда предлагаем корректировку плана, если разница > 20%
                 remaining_days = len([day_num for day_num in range(1, len(training_days) + 1) if day_num > matched_day_num and day_num not in processed_days])
                 is_last_day = (matched_day_num == len(training_days))
-                logging.info(f"Оставшиеся необработанные дни в плане: {remaining_days}, это последний день: {is_last_day}")
+                logging.info(f"Оставшиеся необработанные дни в плане: {remaining_days}, это последний день: {is_last_day}, разница в дистанциях: {diff_percent:.2f}%")
                 
                 if diff_percent > 20 and training_days:
                     # Add a message about the significant difference

@@ -37,12 +37,39 @@ class TrainingPlanManager:
             plan_json = json.dumps(plan_data, ensure_ascii=False)
             
             # Update the plan
-            query = """
-                UPDATE training_plans
-                SET plan_data = %s, updated_at = NOW()
-                WHERE id = %s AND user_id = %s
-                RETURNING id
-            """
+            # First check if the updated_at column exists
+            try:
+                check_query = """
+                    SELECT column_name FROM information_schema.columns 
+                    WHERE table_name = 'training_plans' AND column_name = 'updated_at'
+                """
+                cursor.execute(check_query)
+                has_updated_at = cursor.fetchone() is not None
+
+                if has_updated_at:
+                    query = """
+                        UPDATE training_plans
+                        SET plan_data = %s, updated_at = NOW()
+                        WHERE id = %s AND user_id = %s
+                        RETURNING id
+                    """
+                else:
+                    # Для обратной совместимости, если колонка еще не создана
+                    query = """
+                        UPDATE training_plans
+                        SET plan_data = %s
+                        WHERE id = %s AND user_id = %s
+                        RETURNING id
+                    """
+                    logging.warning("Column updated_at does not exist in training_plans table. Using backward compatible query.")
+            except Exception as e:
+                logging.error(f"Error checking for updated_at column: {e}")
+                query = """
+                    UPDATE training_plans
+                    SET plan_data = %s
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id
+                """
             cursor.execute(query, (plan_json, plan_id, user_id))
             result = cursor.fetchone()
             
