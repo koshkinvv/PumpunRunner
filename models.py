@@ -56,7 +56,8 @@ def create_tables():
             plan_name VARCHAR(255),
             plan_description TEXT,
             plan_data JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
         
