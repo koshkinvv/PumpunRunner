@@ -41,32 +41,107 @@ def kill_running_bots():
     except Exception as e:
         logger.error(f"Ошибка при убийстве процессов бота: {e}")
 
+def kill_monitors():
+    """Убивает все запущенные процессы монитора."""
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['cmdline'] and any('bot_monitor.py' in cmd for cmd in proc.info['cmdline']):
+                    logger.info(f"Убиваем процесс монитора: {proc.info['pid']}")
+                    os.kill(proc.info['pid'], signal.SIGTERM)
+                    time.sleep(1)
+                    if psutil.pid_exists(proc.info['pid']):
+                        os.kill(proc.info['pid'], signal.SIGKILL)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+    except Exception as e:
+        logger.error(f"Ошибка при убийстве процессов монитора: {e}")
+
+def create_monitor_watchdog():
+    """Запускает мониторинг монитора."""
+    def watchdog_function():
+        while True:
+            try:
+                # Проверяем, запущен ли монитор
+                monitor_running = False
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['cmdline'] and any('bot_monitor.py' in cmd for cmd in proc.info['cmdline']):
+                            monitor_running = True
+                            break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        pass
+                
+                # Если монитор не запущен, перезапускаем его
+                if not monitor_running:
+                    logger.warning("Монитор не запущен, перезапускаем...")
+                    
+                    # Создаем директорию для логов, если её нет
+                    os.makedirs("logs", exist_ok=True)
+                    
+                    # Генерируем временную метку для файла логов
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    
+                    # Запускаем монитор в отдельном процессе
+                    monitor_process = subprocess.Popen(
+                        ["python", "bot_monitor.py"],
+                        stdout=open(f"logs/monitor_output_{timestamp}.log", "a"),
+                        stderr=open(f"logs/monitor_error_{timestamp}.log", "a"),
+                        env=dict(os.environ),
+                        cwd=os.getcwd()
+                    )
+                    logger.info(f"Монитор перезапущен (PID: {monitor_process.pid})")
+            except Exception as e:
+                logger.error(f"Ошибка в мониторинге монитора: {e}")
+            
+            # Проверяем каждые 60 секунд
+            time.sleep(60)
+    
+    # Запускаем функцию в отдельном потоке
+    import threading
+    watchdog_thread = threading.Thread(target=watchdog_function, daemon=True)
+    watchdog_thread.start()
+    return watchdog_thread
+
 def start_bot_with_monitor():
     """Запускает бота вместе с монитором здоровья."""
     try:
-        # Сначала убиваем любые запущенные экземпляры бота
+        # Сначала убиваем любые запущенные экземпляры бота и монитора
         kill_running_bots()
+        kill_monitors()
         
         # Создаем директорию для логов, если её нет
         os.makedirs("logs", exist_ok=True)
         
-        # Запускаем бота
+        # Генерируем временную метку для логов
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        
+        # Запускаем бота с перенаправлением выхода в файлы логов
         logger.info("Запускаем бота...")
         bot_process = subprocess.Popen(
             ["python", "main.py"],
-            stdout=open("logs/bot_output.log", "a"),
-            stderr=open("logs/bot_error.log", "a")
+            stdout=open(f"logs/bot_output_{timestamp}.log", "a"),
+            stderr=open(f"logs/bot_error_{timestamp}.log", "a"),
+            env=dict(os.environ),  # Передаем все текущие переменные окружения
+            cwd=os.getcwd()        # Запускаем из текущей директории
         )
         
         # Запускаем монитор в отдельном процессе
         logger.info("Запускаем монитор здоровья...")
         monitor_process = subprocess.Popen(
             ["python", "bot_monitor.py"],
-            stdout=open("logs/monitor_output.log", "a"),
-            stderr=open("logs/monitor_error.log", "a")
+            stdout=open(f"logs/monitor_output_{timestamp}.log", "a"),
+            stderr=open(f"logs/monitor_error_{timestamp}.log", "a"),
+            env=dict(os.environ),
+            cwd=os.getcwd()
         )
         
-        logger.info("Бот и монитор здоровья запущены")
+        logger.info(f"Бот (PID: {bot_process.pid}) и монитор здоровья (PID: {monitor_process.pid}) запущены")
+        logger.info(f"Логи бота: logs/bot_output_{timestamp}.log, logs/bot_error_{timestamp}.log")
+        logger.info(f"Логи монитора: logs/monitor_output_{timestamp}.log, logs/monitor_error_{timestamp}.log")
+        
+        # Запускаем мониторинг монитора
+        create_monitor_watchdog()
         
         # Ждем некоторое время, чтобы убедиться, что процессы стартовали нормально
         time.sleep(5)
@@ -84,9 +159,12 @@ def start_bot_with_monitor():
                         pass
             return False
         
+        logger.info("Все компоненты успешно запущены")
         return True
     except Exception as e:
         logger.error(f"Ошибка при запуске бота с монитором: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 def main():

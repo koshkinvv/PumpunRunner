@@ -200,13 +200,13 @@ def main():
                 signal.signal(signal.SIGINT, signal_handler)
                 
                 # Run the bot until the user sends a signal to stop it
+                # Используем только те параметры, которые поддерживаются текущей версией
                 application.run_polling(
                     drop_pending_updates=True,  # Игнорируем накопившиеся обновления
-                    timeout=30,  # Увеличиваем timeout для долгих соединений
-                    read_timeout=30,
-                    write_timeout=30,
-                    connect_timeout=30,
-                    pool_timeout=30
+                    allowed_updates=None,  # Принимаем все типы обновлений
+                    close_loop=False,  # Не закрываем цикл событий после остановки
+                    stop_signals=(signal.SIGINT, signal.SIGTERM),  # Сигналы для остановки
+                    timeout=30  # Увеличиваем timeout для долгих соединений
                 )
                 
                 # Если мы дошли сюда, значит бот завершился нормально
