@@ -211,7 +211,100 @@ def handle_callback_query(application, update_data):
         elif callback_data.startswith('cancel_'):
             send_telegram_message(chat_id, "Тренировка отменена!")
         elif callback_data == 'view_plan':
-            send_telegram_message(chat_id, "Показываю текущий план тренировок...")
+            # Получаем telegram_id из chat_id
+            telegram_id = chat_id
+            
+            # Импортируем необходимые модули
+            from db_manager import DBManager
+            from training_plan_manager import TrainingPlanManager
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            
+            try:
+                # Получаем user_id из telegram_id
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Получаем последний план пользователя
+                plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+                
+                if not plan:
+                    send_telegram_message(chat_id, "❌ У вас нет активного плана тренировок.")
+                    return
+                
+                # Получаем выполненные и отмененные тренировки
+                plan_id = plan['id']
+                completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+                
+                # Массив дней тренировок
+                training_days = plan['training_days']
+                
+                # Создаём сообщение о плане тренировок
+                message = f"📅 *Ваш план тренировок:*\n\n"
+                
+                # Флаг для разделения предстоящих и прошедших тренировок
+                has_upcoming = False
+                has_completed = False
+                
+                # Добавляем информацию о выполненных/отмененных тренировках
+                completed_message = "*Выполненные и отмененные тренировки:*\n\n"
+                upcoming_message = "*Предстоящие тренировки:*\n\n"
+                
+                # Обрабатываем каждый день тренировки
+                for i, day in enumerate(training_days):
+                    day_num = i + 1
+                    day_info = f"День {day_num}: {day['day']} ({day['date']})\n"
+                    day_info += f"Тип: {day['training_type']}\n"
+                    day_info += f"Дистанция: {day['distance']}\n"
+                    day_info += f"Темп: {day['pace']}\n"
+                    day_info += f"Описание: {day['description']}\n\n"
+                    
+                    # Проверяем, выполнена или отменена ли тренировка
+                    if day_num in completed_days:
+                        completed_message += f"✅ {day_info}"
+                        has_completed = True
+                    elif day_num in canceled_days:
+                        completed_message += f"❌ {day_info}"
+                        has_completed = True
+                    else:
+                        # Предстоящая тренировка
+                        upcoming_message += f"⏳ {day_info}"
+                        has_upcoming = True
+                
+                # Формируем итоговое сообщение
+                if has_completed:
+                    message += completed_message
+                
+                if has_upcoming:
+                    if has_completed:
+                        message += "\n"  # Добавляем разделитель между разделами
+                    message += upcoming_message
+                
+                # Если нет ни выполненных, ни предстоящих тренировок
+                if not has_completed and not has_upcoming:
+                    message += "План тренировок пуст."
+                
+                # Создаём инлайн клавиатуру с кнопками действий
+                keyboard = []
+                
+                # Кнопка для нового плана
+                keyboard.append([InlineKeyboardButton("🔄 Создать новый план", callback_data="new_plan")])
+                
+                # Отправляем сообщение с клавиатурой
+                from telegram_utils import send_message_with_keyboard
+                if 'reply_markup' in callback_query['message']:
+                    # Если это редактирование существующего сообщения
+                    message_id = callback_query['message']['message_id']
+                    edit_message_with_keyboard(chat_id, message_id, message, keyboard)
+                else:
+                    # Если это новое сообщение
+                    send_message_with_keyboard(chat_id, message, keyboard)
+            except Exception as e:
+                logger.error(f"Ошибка при отображении плана тренировок: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
         elif callback_data == 'new_plan':
             send_telegram_message(chat_id, "Создаю новый план тренировок...")
         else:
@@ -278,6 +371,82 @@ def answer_callback_query(callback_query_id, text=None, show_alert=False):
             logger.error(f"Ошибка при ответе на callback query: {response.text}")
     except Exception as e:
         logger.error(f"Ошибка при ответе на callback query: {e}", exc_info=True)
+
+def send_message_with_keyboard(chat_id, text, keyboard, parse_mode=None):
+    """
+    Отправляет сообщение в Telegram с инлайн-клавиатурой.
+    
+    Args:
+        chat_id: ID чата получателя
+        text: Текст сообщения
+        keyboard: Массив кнопок для инлайн-клавиатуры
+        parse_mode: Режим форматирования текста (Markdown, HTML)
+    """
+    try:
+        import requests
+        import json
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        
+        # Создаем клавиатуру в формате, ожидаемом Telegram API
+        reply_markup = {
+            "inline_keyboard": keyboard
+        }
+        
+        data = {
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": json.dumps(reply_markup)
+        }
+        
+        if parse_mode:
+            data["parse_mode"] = parse_mode
+            
+        response = requests.post(url, json=data)
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка при отправке сообщения с клавиатурой: {response.text}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения с клавиатурой: {e}", exc_info=True)
+
+def edit_message_with_keyboard(chat_id, message_id, text, keyboard, parse_mode=None):
+    """
+    Редактирует сообщение в Telegram, добавляя инлайн-клавиатуру.
+    
+    Args:
+        chat_id: ID чата получателя
+        message_id: ID сообщения для редактирования
+        text: Новый текст сообщения
+        keyboard: Массив кнопок для инлайн-клавиатуры
+        parse_mode: Режим форматирования текста (Markdown, HTML)
+    """
+    try:
+        import requests
+        import json
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/editMessageText"
+        
+        # Создаем клавиатуру в формате, ожидаемом Telegram API
+        reply_markup = {
+            "inline_keyboard": keyboard
+        }
+        
+        data = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "reply_markup": json.dumps(reply_markup)
+        }
+        
+        if parse_mode:
+            data["parse_mode"] = parse_mode
+            
+        response = requests.post(url, json=data)
+        
+        if response.status_code != 200:
+            logger.error(f"Ошибка при редактировании сообщения с клавиатурой: {response.text}")
+    except Exception as e:
+        logger.error(f"Ошибка при редактировании сообщения с клавиатурой: {e}", exc_info=True)
 
 @webhook_bp.route("/health", methods=["GET"])
 def health():
