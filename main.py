@@ -423,11 +423,11 @@ def main():
                 except Exception as e:
                     logging.warning(f"Не удалось установить таймаут для бота: {e}")
 
-                # Запускаем бота в режиме polling (всегда, так как Flask уже запущен)
-                # В будущем мы настроим вебхук с помощью отдельного скрипта
-                webhook_mode = os.environ.get("USE_WEBHOOK", "false").lower() == "true"
+                # Временно отключаем webhook режим, так как есть проблемы с URL
+                # Запускаем в режиме поллинга для гарантированной работы команд
+                webhook_mode = False  # os.environ.get("USE_WEBHOOK", "false").lower() == "true"
                 
-                if webhook_mode:
+                if webhook_mode:  # Этот блок будет пропущен (режим webhook временно отключен)
                     # В режиме вебхук не запускаем polling, Flask будет принимать обновления
                     logging.info("Запускаем в режиме webhook...")
                     # Предоставляем приложение для обработки обновлений через webhook
