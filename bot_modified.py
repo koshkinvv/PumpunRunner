@@ -1513,12 +1513,12 @@ async def handle_photo(update, context):
                 # Проверяем, что: 
                 # 1) разница больше 20%
                 # 2) есть training_days
-                # 3) не является последним днем плана (если matched_day_num == 7 в плане из 7 дней)
-                # Проверяем, остались ли непройденные дни в плане (не обрабатываем, если это последний день плана)
+                # 3) проверяем остались ли дни в плане
                 remaining_days = len([day_num for day_num in range(1, len(training_days) + 1) if day_num > matched_day_num and day_num not in processed_days])
-                logging.info(f"Оставшиеся необработанные дни в плане: {remaining_days}")
+                is_last_day = (matched_day_num == len(training_days))
+                logging.info(f"Оставшиеся необработанные дни в плане: {remaining_days}, это последний день: {is_last_day}")
                 
-                if diff_percent > 20 and training_days and remaining_days > 0:
+                if diff_percent > 20 and training_days:
                     # Add a message about the significant difference
                     if actual_distance > planned_distance:
                         training_completion_msg += (
@@ -1531,12 +1531,21 @@ async def handle_photo(update, context):
                             f"Это может указывать на то, что ваш текущий план слишком интенсивен для вас.\n\n"
                         )
                     
-                    # Offer to adjust the plan
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton("📝 Скорректировать план", callback_data=f"adjust_plan_{plan_id}_{matched_day_num}_{actual_distance}_{planned_distance}")]
-                    ])
-                    
-                    training_completion_msg += "Хотите скорректировать оставшиеся тренировки с учетом вашего фактического выполнения?"
+                    # Проверяем, является ли это последним днем плана
+                    if is_last_day:
+                        # Если это последний день плана, предлагаем создать новый план
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔄 Создать новый план", callback_data=f"continue_plan_{plan_id}")]
+                        ])
+                        
+                        training_completion_msg += "Это последний день вашего плана. Хотите создать новый план с учетом ваших фактических результатов?"
+                    else:
+                        # Иначе предлагаем скорректировать существующий план
+                        keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("📝 Скорректировать план", callback_data=f"adjust_plan_{plan_id}_{matched_day_num}_{actual_distance}_{planned_distance}")]
+                        ])
+                        
+                        training_completion_msg += "Хотите скорректировать оставшиеся тренировки с учетом вашего фактического выполнения?"
                     
                     await update.message.reply_text(
                         training_completion_msg,
