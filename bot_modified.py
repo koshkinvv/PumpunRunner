@@ -2,9 +2,13 @@ import os
 import json
 import io
 import traceback
+import logging
 from datetime import datetime, timedelta
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, 
+    MessageHandler, filters, TypeHandler
+)
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, Update
 
 from config import TELEGRAM_TOKEN, logging, STATES
 from models import create_tables
@@ -1809,9 +1813,9 @@ async def start_command(update, context):
     if profile:
         # Если профиль пользователя существует, предлагаем посмотреть текущий план
         buttons = [
-            [KeyboardButton("👁️ Посмотреть текущий план")],
-            [KeyboardButton("🆕 Создать новый план")],
-            [KeyboardButton("✏️ Обновить мой профиль")]
+            ["👁️ Посмотреть текущий план"],
+            ["🆕 Создать новый план"],
+            ["✏️ Обновить мой профиль"]
         ]
         
         welcome_message += (
@@ -1823,7 +1827,7 @@ async def start_command(update, context):
     else:
         # Если профиля нет, предлагаем создать профиль
         buttons = [
-            [KeyboardButton("🏃‍♂️ Создать беговой профиль")]
+            ["🏃‍♂️ Создать беговой профиль"]
         ]
         
         welcome_message += (
@@ -1835,6 +1839,32 @@ async def start_command(update, context):
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
     await update.message.reply_text(welcome_message, reply_markup=reply_markup)
 
+async def log_update(update, context):
+    """Логирует все входящие обновления от Telegram."""
+    try:
+        user = update.effective_user
+        if user:
+            logging.info(f"Получено обновление от пользователя {user.id} (@{user.username}) - {user.first_name} {user.last_name}")
+        
+        # Логируем тип обновления
+        if update.message:
+            if update.message.text:
+                logging.info(f"Текстовое сообщение: {update.message.text}")
+            elif update.message.photo:
+                logging.info(f"Получена фотография")
+            else:
+                logging.info(f"Другой тип сообщения: {update.message}")
+        elif update.callback_query:
+            logging.info(f"Callback запрос: {update.callback_query.data}")
+        else:
+            logging.info(f"Другой тип обновления: {update}")
+        
+        # Передаем обновление дальше в цепочку обработчиков
+        return False
+    except Exception as e:
+        logging.error(f"Ошибка в логировании обновления: {e}")
+        return False
+
 def setup_bot():
     """Configure and return the bot application."""
     # Create the Application object
@@ -1842,6 +1872,9 @@ def setup_bot():
     
     # Create database tables if they don't exist
     create_tables()
+    
+    # Добавляем логирование всех входящих обновлений перед любыми обработчиками
+    application.add_handler(TypeHandler(Update, log_update), group=-1)  # Группа -1 выполняется первой
     
     # Add command handlers
     application.add_handler(CommandHandler("start", start_command))
