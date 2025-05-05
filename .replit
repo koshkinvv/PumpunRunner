@@ -9,7 +9,7 @@ deploymentTarget = "gce"
 run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"]
 
 [workflows]
-runButton = "Web Server"
+runButton = "Bot 24/7"
 
 [[workflows.workflow]]
 name = "Project"
@@ -66,6 +66,19 @@ args = "python main.py"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile - --timeout 120"
+
+[[workflows.workflow]]
+name = "Bot 24/7"
+author = 41797496
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash start_24_7.sh"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python keep_alive.py"
 
 [[ports]]
 localPort = 5000
