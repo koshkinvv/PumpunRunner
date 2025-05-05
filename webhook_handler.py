@@ -629,7 +629,104 @@ def handle_callback_query(application, update_data):
                 logger.error(f"Ошибка при отображении плана тренировок: {e}", exc_info=True)
                 send_telegram_message(chat_id, "❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
         elif callback_data == 'new_plan':
-            send_telegram_message(chat_id, "Создаю новый план тренировок...")
+            # Получаем telegram_id из chat_id
+            telegram_id = chat_id
+            
+            try:
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    # Создаем нового пользователя
+                    user_data = get_user_info(telegram_id)
+                    db_user_id = DBManager.add_user(
+                        telegram_id,
+                        user_data.get('username'),
+                        user_data.get('first_name'),
+                        user_data.get('last_name')
+                    )
+                    if not db_user_id:
+                        send_telegram_message(chat_id, "❌ Произошла ошибка при создании пользователя. Пожалуйста, попробуйте позже.")
+                        return
+                
+                # Перед созданием нового плана проверяем наличие профиля бегуна
+                profile = DBManager.get_runner_profile(db_user_id)
+                
+                if not profile:
+                    # Создаем стартовый профиль по умолчанию, чтобы пользователь мог начать работу
+                    default_profile = DBManager.create_default_runner_profile(db_user_id)
+                    if not default_profile:
+                        send_telegram_message(chat_id, "❌ Не удалось создать профиль бегуна. Пожалуйста, попробуйте позже.")
+                        return
+                    
+                    # Сообщаем пользователю, что профиль создан и запрашиваем данные
+                    send_telegram_message(
+                        chat_id, 
+                        "✅ Создан базовый профиль бегуна. Давайте настроим его под ваши цели.\n\n"
+                        "Пожалуйста, выберите дистанцию, к которой вы готовитесь (в км):"
+                    )
+                    
+                    # Создаем клавиатуру для выбора дистанции
+                    keyboard = [
+                        [
+                            {"text": "5 км", "callback_data": "set_distance_5"}, 
+                            {"text": "10 км", "callback_data": "set_distance_10"}
+                        ],
+                        [
+                            {"text": "21 км (полумарафон)", "callback_data": "set_distance_21"}, 
+                            {"text": "42 км (марафон)", "callback_data": "set_distance_42"}
+                        ]
+                    ]
+                    
+                    send_message_with_keyboard(chat_id, "Выберите дистанцию:", keyboard)
+                    return
+                
+                # Если у пользователя уже есть профиль, начинаем создание нового плана
+                send_telegram_message(chat_id, "⏳ Генерирую новый план тренировок на основе вашего профиля...")
+                
+                # Импортируем генератор плана и сервис OpenAI
+                try:
+                    from openai_service import OpenAIService
+                    
+                    # Создаем экземпляр OpenAIService
+                    openai_service = OpenAIService()
+                    
+                    # Генерируем новый план тренировок
+                    new_plan = openai_service.generate_training_plan(profile)
+                    
+                    if not new_plan:
+                        send_telegram_message(chat_id, "❌ Не удалось сгенерировать план тренировок. Пожалуйста, попробуйте позже.")
+                        return
+                    
+                    # Сохраняем план в базе данных
+                    plan_id = TrainingPlanManager.save_training_plan(db_user_id, new_plan)
+                    
+                    if not plan_id:
+                        send_telegram_message(chat_id, "❌ Не удалось сохранить план тренировок. Пожалуйста, попробуйте позже.")
+                        return
+                    
+                    # Сообщаем пользователю об успешном создании плана
+                    send_telegram_message(chat_id, "✅ Новый план тренировок успешно создан!")
+                    
+                    # Показываем план пользователю
+                    fake_callback_query = {
+                        'id': str(uuid.uuid4()),
+                        'from': {'id': chat_id, 'first_name': 'User'},
+                        'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                        'data': 'view_plan'
+                    }
+                    handle_callback_query(application, {'callback_query': fake_callback_query})
+                
+                except ImportError as e:
+                    logger.error(f"Не удалось импортировать OpenAIService: {e}", exc_info=True)
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при генерации плана. Пожалуйста, попробуйте позже.")
+                except Exception as e:
+                    logger.error(f"Ошибка при создании плана тренировок: {e}", exc_info=True)
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при создании плана тренировок. Пожалуйста, попробуйте позже.")
+            
+            except Exception as e:
+                logger.error(f"Ошибка при обработке запроса на создание нового плана: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при создании плана. Пожалуйста, попробуйте снова.")
         elif callback_data == 'no_adjust':
             # Пользователь отказался от корректировки плана
             send_telegram_message(chat_id, "План тренировок оставлен без изменений.")
@@ -828,6 +925,39 @@ def answer_callback_query(callback_query_id, text=None, show_alert=False):
             logger.error(f"Ошибка при ответе на callback query: {response.text}")
     except Exception as e:
         logger.error(f"Ошибка при ответе на callback query: {e}", exc_info=True)
+
+def get_user_info(telegram_id):
+    """
+    Получает информацию о пользователе из Telegram API.
+    
+    Args:
+        telegram_id: ID пользователя в Telegram
+        
+    Returns:
+        Словарь с информацией о пользователе или пустой словарь в случае ошибки
+    """
+    try:
+        import requests
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getChat"
+        data = {"chat_id": telegram_id}
+        
+        response = requests.post(url, json=data)
+        
+        if response.status_code == 200:
+            result = response.json().get('result', {})
+            return {
+                'first_name': result.get('first_name', ''),
+                'last_name': result.get('last_name', ''),
+                'username': result.get('username', '')
+            }
+        else:
+            logger.error(f"Ошибка при получении информации о пользователе: {response.text}")
+            # Возвращаем пустой словарь в случае ошибки
+            return {}
+    except Exception as e:
+        logger.error(f"Ошибка при получении информации о пользователе: {e}", exc_info=True)
+        return {}
 
 def send_message_with_keyboard(chat_id, text, keyboard, parse_mode=None):
     """
