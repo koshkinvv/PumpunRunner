@@ -38,8 +38,14 @@ export TELEGRAM_TOKEN="your_telegram_token"
 export OPENAI_API_KEY="your_openai_key"
 export DATABASE_URL="postgresql://username:password@host:port/db_name"
 
-# Запустить бота
-python main.py
+# Запустить бота (рекомендуемый способ)
+python run_one_bot.py
+
+# ИЛИ напрямую через deploy_bot.py
+python deploy_bot.py
+
+# НЕ РЕКОМЕНДУЕТСЯ (устаревший способ)
+# python main.py
 ```
 
 ### Запуск на Replit Reserved VM
@@ -61,7 +67,8 @@ python main.py
 
 ## Структура кода
 
-- `main.py` - Основной файл для запуска бота
+- `main.py` - Устаревший файл для запуска бота (не рекомендуется использовать)
+- `run_one_bot.py` - Рекомендуемый способ запуска бота (останавливает все процессы и запускает только один)
 - `bot.py` - Основная логика Telegram бота
 - `conversation.py` - Обработка диалога при сборе профиля бегуна
 - `openai_service.py` - Взаимодействие с OpenAI API для генерации планов
