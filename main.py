@@ -229,22 +229,64 @@ def check_and_kill_other_instances():
                 if proc.info['pid'] == current_pid:
                     continue
 
-                # Проверяем, не является ли процесс экземпляром бота
-                if proc.info['cmdline'] and any(BOT_PROCESS_NAME in cmd for cmd in proc.info['cmdline']):
-                    logging.warning(f"Найден другой экземпляр бота (PID: {proc.info['pid']}), завершаем его")
+                # Проверяем все возможные связанные процессы бота
+                is_bot_process = False
+                
+                # Проверка по командной строке
+                if proc.info['cmdline']:
+                    for cmd in proc.info['cmdline']:
+                        # Ищем основной скрипт бота или связанные скрипты
+                        if any(script_name in cmd for script_name in [
+                            BOT_PROCESS_NAME, 
+                            "bot_modified.py", 
+                            "bot_monitor.py",
+                            "python -m telegram",  # Процессы библиотеки telegram
+                            "getUpdates"  # Процессы получения обновлений
+                        ]):
+                            is_bot_process = True
+                            break
 
-                    # Пытаемся мягко завершить процесс
-                    os.kill(proc.info['pid'], signal.SIGTERM)
-                    time.sleep(2)  # Даем время на завершение
+                # Если это процесс бота
+                if is_bot_process:
+                    logging.warning(f"Найден другой процесс бота (PID: {proc.info['pid']}), завершаем его")
 
-                    # Если процесс все еще жив, применяем SIGKILL
-                    if psutil.pid_exists(proc.info['pid']):
-                        os.kill(proc.info['pid'], signal.SIGKILL)
-                        logging.warning(f"Процесс {proc.info['pid']} принудительно завершен")
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-                logging.warning(f"Ошибка при проверке процесса: {e}")
+                    try:
+                        # Пытаемся мягко завершить процесс
+                        process = psutil.Process(proc.info['pid'])
+                        process.terminate()
+                        
+                        # Даем процессу время на корректное завершение
+                        process.wait(timeout=3)
+                    except psutil.TimeoutExpired:
+                        # Если процесс не завершился, применяем SIGKILL
+                        logging.warning(f"Процесс {proc.info['pid']} не отвечает, принудительно завершаем")
+                        process.kill()
+                    except psutil.NoSuchProcess:
+                        # Процесс уже завершен
+                        pass
+                    except Exception as e:
+                        logging.error(f"Ошибка при завершении процесса {proc.info['pid']}: {e}")
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied, KeyError):
+                # Процесс мог завершиться между итерациями или нет доступа
+                continue
+            except Exception as e:
+                logging.error(f"Ошибка при проверке процесса: {e}")
+
+        # Для надежности также пробуем использовать pkill
+        try:
+            os.system(f"pkill -f {BOT_PROCESS_NAME}")
+            os.system(f"pkill -f 'python.*bot_modified.py'")
+            os.system(f"pkill -f 'python.*bot_monitor.py'")
+            os.system(f"pkill -f 'python.*getUpdates'")
+        except Exception as e:
+            logging.error(f"Ошибка при выполнении pkill: {e}")
+
+        # Небольшая пауза, чтобы процессы успели завершиться
+        time.sleep(3)
+    
     except Exception as e:
-        logging.error(f"Ошибка при проверке других экземпляров: {e}")
+        logging.error(f"Ошибка при поиске других экземпляров бота: {e}")
 
 def try_lock_file():
     """Пытается получить блокировку файла для предотвращения запуска нескольких экземпляров."""
@@ -401,13 +443,19 @@ def main():
 
                 # Настройка обработчика сетевых ошибок
                 # Вызывается при возникновении сетевых проблем
-                def network_error_handler(update, context):
+                async def network_error_handler(update, context):
                     logging.error(f"Ошибка сети при обработке обновления: {context.error}")
                     # Запись состояния памяти при сетевых ошибках
                     vm = psutil.virtual_memory()
                     logging.info(f"Состояние памяти: total={vm.total/(1024*1024):.1f}MB, available={vm.available/(1024*1024):.1f}MB, percent={vm.percent}%")
                     # Обновляем файл здоровья для предотвращения перезапуска
                     update_health_check()
+                    
+                    # Если произошла ошибка конфликта (несколько экземпляров бота)
+                    if "terminated by other getUpdates request" in str(context.error):
+                        logging.warning("Обнаружено несколько экземпляров бота, пробуем остановить конфликтующие процессы")
+                        check_and_kill_other_instances()
+                        time.sleep(5)  # Даем время для завершения других процессов
 
                 # Регистрируем обработчик ошибок
                 application.add_error_handler(network_error_handler)
