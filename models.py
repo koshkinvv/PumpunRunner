@@ -43,6 +43,8 @@ def create_tables():
             fitness_level VARCHAR(50),
             weekly_volume FLOAT,
             training_start_date VARCHAR(50),
+            training_days_per_week INTEGER,
+            preferred_training_days VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

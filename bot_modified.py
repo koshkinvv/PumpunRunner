@@ -271,6 +271,11 @@ async def callback_query_handler(update, context):
     telegram_id = update.effective_user.id
     db_user_id = DBManager.get_user_id(telegram_id)
     
+    # Обработка кнопки "Обновить мой профиль" в профиле
+    if query.data == "update_profile":
+        await update_profile_command(update, context)
+        return
+    
     # Обработка кнопки выполнения тренировки
     if query.data.startswith('complete_'):
         # Формат: complete_PLAN_ID_DAY_NUMBER
