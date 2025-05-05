@@ -6,7 +6,8 @@ packages = ["openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "python run_bot.py & gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"]
+run = ["sh", "-c", "python start_bot_with_monitor.py"]
+ignorePorts = true
 
 [workflows]
 runButton = "Web and Bot"
