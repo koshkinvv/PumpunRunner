@@ -27,20 +27,34 @@ def kill_running_bots():
     """Убивает все запущенные процессы бота."""
     try:
         logger.info("Поиск и завершение запущенных экземпляров бота...")
+        # Используем команды системы для поиска и устранения всех процессов бота
+        try:
+            # Пытаемся убить все процессы python, связанные с ботом
+            os.system("pkill -f 'python.*main.py'")
+            os.system("pkill -f 'python.*bot_monitor.py'")
+            time.sleep(2)
+        except:
+            pass
+            
+        # Также ищем через psutil для более надежного завершения
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 # Ищем все процессы main.py или bot_monitor.py, но исключаем текущий скрипт
-                if proc.info['cmdline'] and any(cmd in ' '.join(proc.info['cmdline']) 
-                                                for cmd in ['main.py', 'bot_monitor.py']) and proc.info['pid'] != os.getpid():
-                    logger.info(f"Убиваем процесс: {proc.info['pid']} - {' '.join(proc.info['cmdline'])}")
-                    os.kill(proc.info['pid'], signal.SIGTERM)
-                    time.sleep(1)
-                    
-                    # Проверяем, завершился ли процесс
-                    if psutil.pid_exists(proc.info['pid']):
-                        os.kill(proc.info['pid'], signal.SIGKILL)
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                pass
+                if proc.info['cmdline'] and proc.info['pid'] != os.getpid():
+                    cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
+                    if any(pattern in cmdline for pattern in ['main.py', 'bot_monitor.py']):
+                        logger.info(f"Убиваем процесс: {proc.info['pid']} - {cmdline}")
+                        try:
+                            os.kill(proc.info['pid'], signal.SIGTERM)
+                            time.sleep(1)
+                            
+                            # Проверяем, завершился ли процесс
+                            if psutil.pid_exists(proc.info['pid']):
+                                os.kill(proc.info['pid'], signal.SIGKILL)
+                        except:
+                            logger.warning(f"Не удалось завершить процесс {proc.info['pid']}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, Exception) as err:
+                logger.warning(f"Ошибка при проверке процесса: {err}")
     except Exception as e:
         logger.error(f"Ошибка при убийстве процессов бота: {e}")
 
@@ -138,14 +152,33 @@ def main():
     """Основная функция для запуска и мониторинга бота в режиме фонового процесса."""
     logger.info("Запуск бота для Replit Deployment (Reserved VM Background Worker)")
     
+    # Дополнительно проверяем и завершаем другие экземпляры этого скрипта
+    try:
+        os.system("pkill -f 'python.*deploy_bot.py' -o")  # Убиваем только старые экземпляры (-o)
+        time.sleep(2)
+    except:
+        pass
+    
     # Удаляем лок-файлы, если они остались от предыдущих запусков
-    for lock_file in ['./uv.lock', './bot.lock', './telegram.lock', './instance.lock']:
+    for lock_file in ['./uv.lock', './bot.lock', './telegram.lock', './instance.lock', './bot_lock.pid']:
         try:
             if os.path.exists(lock_file):
                 os.remove(lock_file)
                 logger.info(f"Удален lock-файл: {lock_file}")
         except Exception as e:
             logger.error(f"Не удалось удалить lock-файл {lock_file}: {e}")
+    
+    # Записываем PID текущего процесса в файл для того, чтобы избежать 
+    # запуска параллельных экземпляров в будущем
+    try:
+        with open('./bot_lock.pid', 'w') as f:
+            f.write(str(os.getpid()))
+        logger.info(f"Записан PID процесса в bot_lock.pid: {os.getpid()}")
+    except Exception as e:
+        logger.error(f"Не удалось записать PID в файл: {e}")
+    
+    # Ждем 10 секунд перед запуском для того, чтобы убедиться, что все старые процессы завершены
+    time.sleep(10)
     
     # Запускаем бота и монитор
     result = start_bot_and_monitor()
