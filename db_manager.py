@@ -412,40 +412,19 @@ class DBManager:
                 
                 # Try to parse the weekly volume
                 try:
-                    # Если weekly_volume число или строка с числом
-                    if isinstance(current_volume, (int, float)):
-                        current_value = float(current_volume)
-                        new_value = current_value + additional_km
-                        new_weekly_volume = f"{new_value:.1f}"
-                    elif isinstance(current_volume, str):
-                        # Обработка строковых форматов с единицами измерения
-                        if "-" in current_volume:
-                            parts = current_volume.split("-")
-                            current_min = float(parts[0])
-                            current_max = float(parts[1].split()[0])  # Remove "км/неделю"
-                            new_min = current_min + additional_km
-                            new_max = current_max + additional_km
-                            new_weekly_volume = f"{new_min:.1f}-{new_max:.1f} км/неделю"
-                        elif "+" in current_volume:
-                            parts = current_volume.split("+")
-                            base_value = float(parts[0])
-                            new_value = base_value + additional_km
-                            new_weekly_volume = f"{new_value:.1f}+ км/неделю"
+                    # Если weekly_volume - строка с числом, конвертируем в число
+                    if current_volume and current_volume.lower() != "none":
+                        # Обрабатываем возможность, что значение может быть с запятой или с точкой
+                        if "," in current_volume:
+                            current_volume_float = float(current_volume.replace(",", "."))
                         else:
-                            # Попытка извлечь число из строки
-                            import re
-                            match = re.search(r'(\d+(\.\d+)?)', current_volume)
-                            if match:
-                                current_value = float(match.group(1))
-                                new_value = current_value + additional_km
-                                # Сохраняем формат с единицами измерения, если есть
-                                if "км/неделю" in current_volume:
-                                    new_weekly_volume = f"{new_value:.1f} км/неделю"
-                                else:
-                                    new_weekly_volume = f"{new_value:.1f}"
-                            else:
-                                # Если не удалось распарсить, просто создаем новое значение
-                                new_weekly_volume = f"{additional_km:.1f}"
+                            current_volume_float = float(current_volume)
+                        
+                        # Прибавляем новые километры
+                        new_value = current_volume_float + additional_km
+                        
+                        # Форматируем обратно в строку с 1 знаком после запятой
+                        new_weekly_volume = f"{new_value:.1f}"
                     else:
                         # Если формат не определен, используем просто число
                         new_weekly_volume = f"{additional_km:.1f}"
@@ -484,6 +463,43 @@ class DBManager:
             if conn:
                 conn.rollback()
             return None
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def get_all_users_with_plans():
+        """
+        Получает всех пользователей, у которых есть планы тренировок.
+        
+        Returns:
+            List of dicts: [{'id': user_id, 'telegram_id': telegram_id, 'username': username}, ...]
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Выбираем пользователей, у которых есть связанные записи в таблице training_plans
+                cursor.execute(
+                    """
+                    SELECT DISTINCT u.id, u.telegram_id, u.username 
+                    FROM users u
+                    INNER JOIN training_plans tp ON u.id = tp.user_id
+                    ORDER BY u.id
+                    """
+                )
+                users = cursor.fetchall()
+                
+                # Конвертируем результаты в список словарей
+                result = []
+                for user in users:
+                    result.append(dict(user))
+                
+                return result
+                
+        except Exception as e:
+            logging.error(f"Ошибка при получении пользователей с планами: {e}")
+            return []
         finally:
             if conn:
                 conn.close()

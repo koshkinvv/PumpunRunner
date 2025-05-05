@@ -52,6 +52,9 @@ class RunnerProfileConversation:
         context.user_data['db_user_id'] = db_user_id
         context.user_data['profile_data'] = {}
         
+        # Добавляем информацию, что это обновление существующего профиля
+        context.user_data['is_profile_update'] = True
+        
         # Запрос новой дистанции
         await update.message.reply_text(
             f"Начинаем обновление вашего профиля бегуна.\n"
@@ -89,16 +92,17 @@ class RunnerProfileConversation:
         # Проверяем, есть ли у пользователя уже профиль
         existing_profile = DBManager.get_runner_profile(user_id)
         if existing_profile:
-            # У пользователя уже есть профиль, предлагаем варианты
+            # У пользователя уже есть профиль
             await update.message.reply_text(
-                f"👋 Привет, {user.first_name}! У вас уже есть профиль бегуна.\n\n"
-                "Что вы хотите сделать?",
-                reply_markup=ReplyKeyboardMarkup([
-                    ['👁️ Посмотреть текущий план'],
-                    ['🆕 Создать новый план'],
-                    ['✏️ Обновить мой профиль']
-                ], resize_keyboard=True, one_time_keyboard=True)
+                f"👋 Привет, {user.first_name}! У вас уже есть профиль бегуна."
             )
+            
+            # Импортируем функцию для отображения главного меню
+            from bot_modified import send_main_menu
+            
+            # Отправляем главное меню
+            await send_main_menu(update, context, "Что вы хотите сделать?")
+            
             return ConversationHandler.END
         
         # Store user_id in context.user_data
@@ -951,12 +955,8 @@ class RunnerProfileConversation:
             
             # Save profile to database
             if DBManager.save_runner_profile(user_id, profile_data):
-                from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-                
-                # Создаем клавиатуру с кнопкой для генерации плана
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🏋️ Подготовить план тренировок", callback_data="generate_plan")]
-                ])
+                # Устанавливаем флаг обновления профиля для предложения создания нового плана
+                context.user_data['profile_updated'] = True
                 
                 await update.message.reply_text(
                     "🎉 Отлично! Ваш профиль бегуна успешно сохранен. "
@@ -964,11 +964,12 @@ class RunnerProfileConversation:
                     reply_markup=ReplyKeyboardRemove()
                 )
                 
-                # Отправляем сообщение с кнопкой для генерации плана
-                await update.message.reply_text(
-                    "Теперь вы можете получить персонализированный план тренировок, "
-                    "основанный на вашем профиле. Нажмите на кнопку ниже или используйте команду /plan.",
-                    reply_markup=keyboard
+                # Импортируем функцию для отображения главного меню
+                from bot_modified import send_main_menu
+                
+                # Отправляем главное меню с возможностью генерации плана
+                await send_main_menu(update, context, 
+                    "Теперь вы можете получить персонализированный план тренировок, основанный на вашем профиле."
                 )
             else:
                 await update.message.reply_text(
@@ -1003,9 +1004,16 @@ class RunnerProfileConversation:
     async def cancel(self, update: Update, context: CallbackContext):
         """Cancel the conversation."""
         await update.message.reply_text(
-            "Создание профиля отменено. Вы можете начать снова в любое время, отправив команду /start.",
+            "Создание профиля отменено. Вы можете начать снова в любое время.",
             reply_markup=ReplyKeyboardRemove()
         )
+        
+        # Импортируем функцию для отображения главного меню
+        from bot_modified import send_main_menu
+        
+        # Отправляем главное меню с возможностью вернуться к созданию профиля
+        await send_main_menu(update, context, "Что бы вы хотели сделать дальше?")
+        
         return ConversationHandler.END
     
     def get_conversation_handler(self):

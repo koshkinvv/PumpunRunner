@@ -16,6 +16,48 @@ from conversation import RunnerProfileConversation
 from image_analyzer import ImageAnalyzer
 
 
+async def send_main_menu(update, context, message_text="Что вы хотите сделать?"):
+    """Отправляет главное меню с кнопками."""
+    telegram_id = update.effective_user.id
+    db_user_id = DBManager.get_user_id(telegram_id)
+    
+    # Проверка на существование профиля
+    has_profile = False
+    if db_user_id:
+        profile = DBManager.get_runner_profile(db_user_id)
+        has_profile = profile is not None
+    
+    # Проверка на существование плана
+    has_plan = False
+    if has_profile:
+        plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+        has_plan = plan is not None
+    
+    # Формируем кнопки в зависимости от состояния пользователя
+    buttons = []
+    
+    if has_plan:
+        buttons.append([InlineKeyboardButton("👁️ Посмотреть текущий план", callback_data="view_plan")])
+        buttons.append([InlineKeyboardButton("🆕 Создать новый план", callback_data="new_plan")])
+    elif has_profile:
+        buttons.append([InlineKeyboardButton("🏋️ Подготовить план тренировок", callback_data="generate_plan")])
+    
+    if has_profile:
+        buttons.append([InlineKeyboardButton("✏️ Обновить мой профиль", callback_data="update_profile")])
+        buttons.append([InlineKeyboardButton("🏃‍♂️ Показать мой профиль", callback_data="show_profile")])
+    
+    buttons.append([InlineKeyboardButton("❓ Помощь", callback_data="help")])
+    
+    # Создаем клавиатуру
+    keyboard = InlineKeyboardMarkup(buttons)
+    
+    # Отправляем сообщение с кнопками
+    if hasattr(update, 'callback_query') and update.callback_query:
+        await update.callback_query.message.reply_text(message_text, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(message_text, reply_markup=keyboard)
+
+
 def format_weekly_volume(volume, default_value="0"):
     """
     Форматирует значение еженедельного объема бега, избегая отображения None.
@@ -256,12 +298,17 @@ async def generate_plan_command(update, context):
             ])
             
             await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+        
+        # После отправки всех дней тренировки, показываем главное меню
+        await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
             
     except Exception as e:
         logging.error(f"Error generating training plan: {e}")
         await update.message.reply_text(
             "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
         )
+        # Показываем главное меню в случае ошибки
+        await send_main_menu(update, context)
 
 async def update_profile_command(update, context):
     """Handler for the /update command - starts runner profile update dialog."""
@@ -304,6 +351,27 @@ async def callback_query_handler(update, context):
     
     telegram_id = update.effective_user.id
     db_user_id = DBManager.get_user_id(telegram_id)
+    
+    # Запоминаем callback_data для возможного восстановления после выполнения действия
+    original_callback_data = query.data
+    context.user_data['last_callback'] = original_callback_data
+    
+    # Обработка кнопки "Помощь"
+    if query.data == "help":
+        help_text = (
+            "👋 Привет! Я бот-помощник для бегунов. Вот что я могу:\n\n"
+            "/plan - Создать или просмотреть план тренировок\n"
+            "/pending - Показать только незавершенные тренировки\n"
+            "/update - Обновить ваш профиль бегуна\n"
+            "/help - Показать это сообщение с командами\n\n"
+            "📱 Вы также можете отправить мне скриншот из вашего трекера тренировок (Nike Run, Strava, Garmin и др.), "
+            "и я автоматически проанализирую его и зачту вашу тренировку!"
+        )
+        await query.message.reply_text(help_text)
+        
+        # Показываем меню после справки
+        await send_main_menu(update, context)
+        return
     
     # Обработка кнопки "Обновить мой профиль" в профиле
     if query.data == "update_profile":
@@ -488,6 +556,8 @@ async def callback_query_handler(update, context):
             
             if not plan:
                 await query.message.reply_text("❌ У вас нет активного плана тренировок.")
+                # Показываем главное меню снова
+                await send_main_menu(update, context)
                 return
             
             # Получаем выполненные и отмененные тренировки
@@ -502,6 +572,9 @@ async def callback_query_handler(update, context):
                 f"{plan['plan_description']}",
                 parse_mode='Markdown'
             )
+            
+            # После показа плана восстанавливаем главное меню
+            await send_main_menu(update, context, "Что еще вы хотите сделать?")
             
             # Отправляем каждый день тренировки с соответствующими кнопками
             # Проверяем структуру данных плана и выбираем правильное поле
@@ -583,54 +656,74 @@ async def callback_query_handler(update, context):
                 await conversation.start(update, context)
                 return
             
-            # Получаем сообщение о подготовке нового плана
-            with open("attached_assets/котик.jpeg", "rb") as photo:
-                await query.message.reply_photo(
-                    photo=photo,
-                    caption="⏳ Генерирую новый персонализированный план тренировок с учетом вашего обновленного профиля. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
-                )
-            
-            # Получаем сервис OpenAI и генерируем полностью новый план по обновленному профилю
-            openai_service = OpenAIService()
-            plan = openai_service.generate_training_plan(profile)
-            
-            # Сохраняем план в базу данных
-            plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
-            
-            if not plan_id:
-                await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+            # Устанавливаем флаг, что план уже создается, чтобы избежать дублирования
+            user_data = context.user_data
+            if user_data.get('is_generating_plan', False):
+                logging.info(f"План уже создается для пользователя {telegram_id}. Пропускаем повторный запрос.")
+                # Показываем главное меню снова
+                await send_main_menu(update, context, "В данный момент идет создание плана. Выберите другое действие:")
                 return
             
-            # Отправляем общую информацию о плане
-            await query.message.reply_text(
-                f"✅ Ваш персонализированный план тренировок готов!\n\n"
-                f"*{plan['plan_name']}*\n\n"
-                f"{plan['plan_description']}",
-                parse_mode='Markdown'
-            )
+            # Устанавливаем флаг, что план создается
+            user_data['is_generating_plan'] = True
             
-            # Отправляем каждый день тренировки с соответствующими кнопками
-            for idx, day in enumerate(plan['training_days']):
-                training_day_num = idx + 1
-                day_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {day['training_type']}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
+            try:
+                # Получаем сообщение о подготовке нового плана
+                with open("attached_assets/котик.jpeg", "rb") as photo:
+                    await query.message.reply_photo(
+                        photo=photo,
+                        caption="⏳ Генерирую новый персонализированный план тренировок с учетом вашего обновленного профиля. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+                    )
+                
+                # Получаем сервис OpenAI и генерируем полностью новый план по обновленному профилю
+                openai_service = OpenAIService()
+                plan = openai_service.generate_training_plan(profile)
+                
+                # Сохраняем план в базу данных
+                plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+                
+                if not plan_id:
+                    await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+                    return
+                
+                # Отправляем общую информацию о плане
+                await query.message.reply_text(
+                    f"✅ Ваш персонализированный план тренировок готов!\n\n"
+                    f"*{plan['plan_name']}*\n\n"
+                    f"{plan['plan_description']}",
+                    parse_mode='Markdown'
                 )
                 
-                # Создаем кнопки для действий
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
-                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
-                ])
+                # Отправляем каждый день тренировки с соответствующими кнопками
+                for idx, day in enumerate(plan['training_days']):
+                    training_day_num = idx + 1
+                    day_message = (
+                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {day['training_type']}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    # Создаем кнопки для действий
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                        [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
+                    ])
+                    
+                    await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
                 
-                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                # Показываем главное меню после генерации плана
+                await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
+            finally:
+                # Снимаем флаг генерации плана, даже если произошла ошибка
+                user_data['is_generating_plan'] = False
                 
         except Exception as e:
             logging.error(f"Error creating new training plan: {e}")
             await query.message.reply_text("❌ Произошла ошибка при создании нового плана тренировок.")
+            # Сбрасываем флаг генерации плана в случае ошибки
+            context.user_data['is_generating_plan'] = False
             
     # Обработка кнопки "Подготовить план тренировок"
     elif query.data == "generate_plan":
@@ -659,7 +752,24 @@ async def callback_query_handler(update, context):
                 )
                 return
             
-            # Получаем последний план пользователя
+            # Определяем, нужно ли предлагать создание нового плана
+            # После обновления профиля всегда предлагаем создать новый план
+            if context.user_data.get('profile_updated', False):
+                # Профиль был обновлен, предлагаем создать новый план
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🆕 Создать новый план", callback_data="new_plan")]
+                ])
+                
+                await query.message.reply_text(
+                    "Ваш профиль был обновлен! Вы можете создать новый персонализированный план тренировок с учетом этих изменений.",
+                    reply_markup=keyboard
+                )
+                
+                # Сбрасываем флаг обновления профиля
+                context.user_data['profile_updated'] = False
+                return
+            
+            # Проверяем, есть ли у пользователя уже существующий план тренировок
             plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
             
             if plan:
@@ -675,54 +785,72 @@ async def callback_query_handler(update, context):
                 )
                 return
             
-            # Генерируем новый план тренировок и отправляем сообщение с котиком
-            with open("attached_assets/котик.jpeg", "rb") as photo:
-                await query.message.reply_photo(
-                    photo=photo,
-                    caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
-                )
-            
-            # Получаем сервис OpenAI и генерируем план
-            openai_service = OpenAIService()
-            plan = openai_service.generate_training_plan(profile)
-            
-            # Сохраняем план в базу данных
-            plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
-            
-            if not plan_id:
-                await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+            # Устанавливаем флаг, что план уже создается, чтобы избежать дублирования
+            user_data = context.user_data
+            if user_data.get('is_generating_plan', False):
+                logging.info(f"План уже создается для пользователя {telegram_id}. Пропускаем повторный запрос.")
                 return
             
-            # Отправляем общую информацию о плане
-            await query.message.reply_text(
-                f"✅ Ваш персонализированный план тренировок готов!\n\n"
-                f"*{plan['plan_name']}*\n\n"
-                f"{plan['plan_description']}",
-                parse_mode='Markdown'
-            )
+            # Устанавливаем флаг, что план создается
+            user_data['is_generating_plan'] = True
             
-            # Отправляем каждый день тренировки с кнопками действий
-            for idx, day in enumerate(plan['training_days']):
-                training_day_num = idx + 1
-                day_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {day['training_type']}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
+            try:
+                # Генерируем новый план тренировок и отправляем сообщение с котиком
+                with open("attached_assets/котик.jpeg", "rb") as photo:
+                    await query.message.reply_photo(
+                        photo=photo,
+                        caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+                    )
+                
+                # Получаем сервис OpenAI и генерируем план
+                openai_service = OpenAIService()
+                plan = openai_service.generate_training_plan(profile)
+                
+                # Сохраняем план в базу данных
+                plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+                
+                if not plan_id:
+                    await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+                    return
+                
+                # Отправляем общую информацию о плане
+                await query.message.reply_text(
+                    f"✅ Ваш персонализированный план тренировок готов!\n\n"
+                    f"*{plan['plan_name']}*\n\n"
+                    f"{plan['plan_description']}",
+                    parse_mode='Markdown'
                 )
                 
-                # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
-                keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
-                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
-                ])
+                # Отправляем каждый день тренировки с кнопками действий
+                for idx, day in enumerate(plan['training_days']):
+                    training_day_num = idx + 1
+                    day_message = (
+                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                        f"Тип: {day['training_type']}\n"
+                        f"Дистанция: {day['distance']}\n"
+                        f"Темп: {day['pace']}\n\n"
+                        f"{day['description']}"
+                    )
+                    
+                    # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                        [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
+                    ])
+                    
+                    await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
                 
-                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                # Показываем главное меню после генерации плана
+                await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
+            finally:
+                # Снимаем флаг генерации плана, даже если произошла ошибка
+                user_data['is_generating_plan'] = False
                 
         except Exception as e:
             logging.error(f"Error generating plan from button: {e}")
             await query.message.reply_text("❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже.")
+            # Сбрасываем флаг генерации плана в случае ошибки
+            context.user_data['is_generating_plan'] = False
     
     # Обработка кнопки "Ни один из этих дней" при анализе скриншота тренировки
     elif query.data == "none_match":
@@ -1231,6 +1359,9 @@ async def callback_query_handler(update, context):
                 parse_mode='Markdown'
             )
             
+            # Показываем главное меню после генерации нового плана
+            await send_main_menu(update, context, "Что еще вы хотите сделать?")
+            
             # Отправляем каждый день тренировки с соответствующими кнопками
             for idx, day in enumerate(new_plan['training_days']):
                 training_day_num = idx + 1
@@ -1605,11 +1736,17 @@ async def handle_photo(update, context):
                 reply_markup=keyboard
             )
             
+            # После отправки кнопок для ручного сопоставления показываем главное меню
+            await send_main_menu(update, context, "Что еще вы хотите сделать?")
+            
     except Exception as e:
         logging.error(f"Error handling photo: {e}")
         await update.message.reply_text(
             "❌ Произошла ошибка при анализе фотографии. Пожалуйста, попробуйте позже или отметьте тренировку вручную через /pending."
         )
+        
+        # После обработки ошибки показываем главное меню
+        await send_main_menu(update, context)
 
 
 def setup_bot():
@@ -1637,19 +1774,8 @@ def setup_bot():
             reply_markup=ReplyKeyboardRemove()
         )
         
-        # Затем показываем основные кнопки меню
-        keyboard = ReplyKeyboardMarkup(
-            [
-                ["👁️ Посмотреть текущий план", "🆕 Создать новый план"],
-                ["✏️ Обновить мой профиль", "🏃‍♂️ Показать мой профиль"]
-            ],
-            resize_keyboard=True
-        )
-        
-        await update.message.reply_text(
-            "Что бы вы хотели сделать дальше?",
-            reply_markup=keyboard
-        )
+        # Используем нашу новую функцию для показа главного меню
+        await send_main_menu(update, context, "Что бы вы хотели сделать дальше?")
         
         return END
         
@@ -1687,6 +1813,15 @@ def setup_bot():
         if not db_user_id:
             await update.message.reply_text(
                 "Пожалуйста, используйте команду /start, чтобы начать работу с ботом."
+            )
+            
+            # Показываем главное меню даже при отсутствии профиля пользователя
+            # с базовыми командами
+            await update.message.reply_text(
+                "Для начала работы, нажмите кнопку ниже или введите команду /start:",
+                reply_markup=ReplyKeyboardMarkup([
+                    ["🚀 Начать работу с ботом"]
+                ], resize_keyboard=True)
             )
             return
         
@@ -1851,6 +1986,9 @@ def setup_bot():
                     parse_mode='Markdown'
                 )
                 
+                # Показываем главное меню после генерации плана
+                await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
+                
                 # Отправляем дни тренировок
                 # Определяем структуру плана
                 training_days = []
@@ -1898,9 +2036,15 @@ def setup_bot():
                     "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
                 )
                 
+                # Показываем главное меню после ошибки генерации плана
+                await send_main_menu(update, context, "Что вы хотите сделать?")
+                
         elif text == "✏️ Обновить мой профиль":
             # Запускаем update_profile_command напрямую
             await update_profile_command(update, context)
+            
+            # После запуска диалога обновления профиля показываем главное меню, на случай если пользователь выйдет из диалога
+            await send_main_menu(update, context, "Что вы хотите сделать?")
             
         elif text == "🏃‍♂️ Показать мой профиль":
             # Показываем текущий профиль пользователя
@@ -1910,6 +2054,8 @@ def setup_bot():
                 await update.message.reply_text(
                     "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /plan."
                 )
+                # Показываем главное меню даже если профиля нет
+                await send_main_menu(update, context)
                 return
             
             # Форматируем информацию о профиле для отображения
@@ -1945,6 +2091,9 @@ def setup_bot():
                 parse_mode='Markdown',
                 reply_markup=keyboard
             )
+            
+            # Показываем главное меню после показа профиля
+            await send_main_menu(update, context, "Что еще вы хотите сделать с вашим профилем?")
     
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))

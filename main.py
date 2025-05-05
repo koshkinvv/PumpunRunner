@@ -8,8 +8,11 @@ import signal
 import psutil
 import fcntl
 import datetime
+import asyncio
+import threading
 from bot_modified import setup_bot
 from app import app  # Импортируем Flask-приложение из app.py
+from training_reminder import schedule_reminders
 
 # Константы для мониторинга здоровья
 HEALTH_CHECK_FILE = "bot_health.txt"
@@ -149,6 +152,18 @@ def setup_health_update():
     health_thread = threading.Thread(target=send_health_signal, daemon=True)
     health_thread.start()
 
+def start_reminder_loop():
+    """Запускает планировщик напоминаний о тренировках."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        logging.info("Запуск планировщика напоминаний о тренировках...")
+        loop.run_until_complete(schedule_reminders())
+    except Exception as e:
+        logging.error(f"Ошибка в планировщике напоминаний: {e}")
+    finally:
+        loop.close()
+
 def main():
     """Main function to start the Telegram bot."""
     # Setup logging
@@ -166,6 +181,11 @@ def main():
     try:
         # Проверяем и убиваем другие экземпляры бота
         check_and_kill_other_instances()
+        
+        # Запускаем планировщик напоминаний в отдельном потоке
+        reminder_thread = threading.Thread(target=start_reminder_loop, daemon=True)
+        reminder_thread.start()
+        logging.info("Планировщик напоминаний о тренировках запущен в отдельном потоке")
         
         max_retries = 5
         retry_count = 0

@@ -44,17 +44,24 @@ class OpenAIService:
             # Попытка распарсить дату начала тренировок
             start_date = None
             
-            if user_start_date and user_start_date.lower() != 'сегодня':
+            if user_start_date and user_start_date.lower() != 'сегодня' and user_start_date.lower() != 'не знаю':
                 try:
                     # Попробуем распарсить дату в формате "ДД.ММ.ГГГГ"
                     logging.info(f"Пытаемся распарсить дату начала тренировок: {user_start_date}")
                     
                     # Обрабатываем несколько возможных форматов
-                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
+                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m"]
                     
                     for fmt in formats:
                         try:
-                            start_date = datetime.strptime(user_start_date, fmt)
+                            if fmt == "%d.%m":
+                                # Для формата без года добавляем текущий год
+                                current_year = datetime.now().year
+                                date_with_year = f"{user_start_date}.{current_year}"
+                                start_date = datetime.strptime(date_with_year, "%d.%m.%Y")
+                            else:
+                                start_date = datetime.strptime(user_start_date, fmt)
+                            
                             start_date = moscow_tz.localize(start_date)
                             logging.info(f"Успешно распарсили дату: {start_date.strftime('%d.%m.%Y')}")
                             break
@@ -70,18 +77,135 @@ class OpenAIService:
             
             logging.info(f"Дата начала тренировок: {start_date.strftime('%d.%m.%Y %H:%M:%S')}")
             
-            # Генерируем все 7 дат для плана
-            dates = []
-            for i in range(7):
-                date = start_date + timedelta(days=i)
-                dates.append(date.strftime("%d.%m.%Y"))
+            # Получаем предпочитаемые дни тренировок
+            preferred_days_str = runner_profile.get('preferred_training_days', '')
+            preferred_days = []
             
-            # Для промпта OpenAI используем первый и второй день
+            if preferred_days_str:
+                # Словарь для преобразования сокращений дней недели в числа (0 - понедельник, 6 - воскресенье)
+                day_name_to_number = {
+                    'пн': 0, 'вт': 1, 'ср': 2, 'чт': 3, 'пт': 4, 'сб': 5, 'вс': 6,
+                    'понедельник': 0, 'вторник': 1, 'среда': 2, 'четверг': 3, 
+                    'пятница': 4, 'суббота': 5, 'воскресенье': 6
+                }
+                
+                # Разбиваем строку предпочитаемых дней и преобразуем в числа
+                for day in preferred_days_str.lower().split(','):
+                    day = day.strip()
+                    if day in day_name_to_number:
+                        preferred_days.append(day_name_to_number[day])
+            
+            logging.info(f"Предпочитаемые дни недели: {preferred_days}")
+            
+            # Если предпочитаемые дни не указаны, используем все дни недели
+            if not preferred_days:
+                preferred_days = list(range(7))  # 0 - понедельник, 6 - воскресенье
+            
+            # Количество тренировочных дней в неделю (по умолчанию 3)
+            training_days_count = int(runner_profile.get('training_days_per_week', 3))
+            
+            # Убедимся, что у нас достаточно дней для тренировок
+            if len(preferred_days) < training_days_count:
+                logging.warning(f"Недостаточно предпочитаемых дней ({len(preferred_days)}) для требуемого количества тренировок ({training_days_count}). Добавляем дополнительные дни.")
+                for i in range(7):
+                    if i not in preferred_days:
+                        preferred_days.append(i)
+                        if len(preferred_days) >= training_days_count:
+                            break
+            
+            # Если указано больше предпочитаемых дней, чем нужно для тренировок, используем первые N дней
+            if len(preferred_days) > training_days_count:
+                preferred_days = preferred_days[:training_days_count]
+            
+            # Сортируем дни недели, чтобы они шли по порядку
+            preferred_days.sort()
+            
+            logging.info(f"Отсортированные предпочитаемые дни недели: {preferred_days}")
+            
+            # Определяем ближайшие даты для тренировок с учетом предпочитаемых дней недели
+            training_dates = []
+            current_date = start_date
+            
+            # Проверяем, если стартовая дата раньше текущей даты, используем текущую
+            now = datetime.now(pytz.UTC).astimezone(moscow_tz)
+            if current_date.date() < now.date():
+                current_date = now
+                logging.warning(f"Стартовая дата в прошлом, используем текущую: {current_date.strftime('%d.%m.%Y')}")
+            
+            # Получаем день недели для стартовой даты (0 - понедельник, 6 - воскресенье)
+            start_weekday = current_date.weekday()
+            logging.info(f"День недели стартовой даты: {start_weekday} ({current_date.strftime('%A')})")
+            
+            # Находим первый подходящий день для начала тренировок
+            days_to_add = 0
+            if preferred_days:
+                # Ищем ближайший предпочитаемый день недели, начиная со стартовой даты
+                min_days_to_add = float('inf')
+                for day in preferred_days:
+                    # Вычисляем, сколько дней нужно добавить к стартовой дате
+                    if day >= start_weekday:
+                        days = day - start_weekday
+                    else:
+                        days = 7 - start_weekday + day
+                    
+                    if days < min_days_to_add:
+                        min_days_to_add = days
+                
+                days_to_add = min_days_to_add
+            
+            # Добавляем дни к стартовой дате, чтобы получить первый день тренировки
+            first_training_date = current_date + timedelta(days=days_to_add)
+            logging.info(f"Первый день тренировки: {first_training_date.strftime('%d.%m.%Y (%A)')}")
+            
+            # Генерируем даты для всех тренировочных дней
+            training_day_counter = 0
+            date_to_check = first_training_date
+            
+            while training_day_counter < training_days_count:
+                weekday = date_to_check.weekday()
+                
+                if weekday in preferred_days:
+                    training_dates.append(date_to_check)
+                    training_day_counter += 1
+                    logging.info(f"Добавлена дата тренировки: {date_to_check.strftime('%d.%m.%Y (%A)')}")
+                
+                date_to_check = date_to_check + timedelta(days=1)
+            
+            # Преобразуем даты в строки формата "ДД.ММ.YYYY" для использования в плане
+            dates = [date.strftime("%d.%m.%Y") for date in training_dates]
+            
+            # Для промпта OpenAI используем первый день тренировки
             first_day_str = dates[0]
-            second_day_str = dates[1]
+            # Если есть второй день тренировки, используем его, иначе используем день после первого
+            second_day_str = dates[1] if len(dates) > 1 else (training_dates[0] + timedelta(days=1)).strftime("%d.%m.%Y")
             
             logging.info(f"Сгенерированные даты для плана: {dates}")
             logging.info(f"Первый день: {first_day_str}, второй день: {second_day_str}")
+            
+            # Преобразуем числовые дни недели в названия для промпта
+            day_number_to_name = {
+                0: "Понедельник (Пн)", 
+                1: "Вторник (Вт)", 
+                2: "Среда (Ср)", 
+                3: "Четверг (Чт)", 
+                4: "Пятница (Пт)", 
+                5: "Суббота (Сб)", 
+                6: "Воскресенье (Вс)"
+            }
+            
+            preferred_days_names = [day_number_to_name[day] for day in preferred_days]
+            preferred_days_text = ", ".join(preferred_days_names)
+            
+            # Получаем словарь дат тренировок с днями недели
+            training_dates_with_weekdays = {}
+            for date in training_dates:
+                weekday_num = date.weekday()
+                weekday_name = day_number_to_name[weekday_num]
+                date_str = date.strftime("%d.%m.%Y")
+                training_dates_with_weekdays[date_str] = weekday_name
+            
+            # Форматируем информацию о датах тренировок для промпта
+            training_dates_info = "\n".join([f"- {date}: {weekday}" for date, weekday in training_dates_with_weekdays.items()])
             
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -89,12 +213,18 @@ class OpenAIService:
                 messages=[
                     {"role": "system", "content": 
                      f"Ты опытный беговой тренер. Твоя задача - создать персонализированный план "
-                     f"тренировок на 7 дней, основываясь на профиле бегуна. "
-                     f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
-                     f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
-                     f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
-                     f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
-                     f"Учитывай цель бегуна, его физическую подготовку и еженедельный объем. "
+                     f"тренировок для бегуна, используя ТОЛЬКО указанные даты в точном соответствии с предпочтениями пользователя.\n\n"
+                     f"Пользователь выбрал следующие предпочитаемые дни недели для тренировок: {preferred_days_text}.\n"
+                     f"На основе этого выбора и указанной даты начала тренировок, были определены следующие даты тренировок:\n{training_dates_info}\n\n"
+                     f"ВАЖНО: План тренировок должен включать ТОЛЬКО ЭТИ ДАТЫ и ДНИ НЕДЕЛИ. "
+                     f"НЕ ДОБАВЛЯЙ дополнительные дни тренировок кроме указанных выше дат.\n\n"
+                     f"План должен быть структурирован строго по этим дням недели с указанными датами.\n\n"
+                     f"Каждый день в плане должен обязательно содержать: день недели (например, 'Вторник'), "
+                     f"дату в формате ДД.ММ.YYYY (например, '07.05.2025'), тип тренировки, дистанцию, целевой темп "
+                     f"и детальное описание тренировки.\n\n"
+                     f"План должен включать все важные компоненты тренировочного процесса: длительные пробежки, интервальные тренировки, "
+                     f"темповые тренировки и восстановительные пробежки, в зависимости от цели и уровня подготовки бегуна.\n\n"
+                     f"Учитывай цель бегуна, его физическую подготовку и еженедельный объем.\n\n"
                      f"Отвечай только в указанном JSON формате на русском языке."
                     },
                     {"role": "user", "content": prompt}
@@ -415,17 +545,24 @@ class OpenAIService:
             # Попытка распарсить дату начала тренировок
             start_date = None
             
-            if user_start_date and user_start_date.lower() != 'сегодня':
+            if user_start_date and user_start_date.lower() != 'сегодня' and user_start_date.lower() != 'не знаю':
                 try:
                     # Попробуем распарсить дату в формате "ДД.ММ.ГГГГ"
                     logging.info(f"Продолжение плана - пытаемся распарсить дату начала: {user_start_date}")
                     
                     # Обрабатываем несколько возможных форматов
-                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"]
+                    formats = ["%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%d.%m"]
                     
                     for fmt in formats:
                         try:
-                            start_date = datetime.strptime(user_start_date, fmt)
+                            if fmt == "%d.%m":
+                                # Для формата без года добавляем текущий год
+                                current_year = datetime.now().year
+                                date_with_year = f"{user_start_date}.{current_year}"
+                                start_date = datetime.strptime(date_with_year, "%d.%m.%Y")
+                            else:
+                                start_date = datetime.strptime(user_start_date, fmt)
+                            
                             start_date = moscow_tz.localize(start_date)
                             logging.info(f"Успешно распарсили дату продолжения: {start_date.strftime('%d.%m.%Y')}")
                             break
@@ -441,15 +578,131 @@ class OpenAIService:
             
             logging.info(f"Дата начала продолжения плана: {start_date.strftime('%d.%m.%Y %H:%M:%S')}")
             
-            # Генерируем все 7 дат для плана
-            dates = []
-            for i in range(7):
-                date = start_date + timedelta(days=i)
-                dates.append(date.strftime("%d.%m.%Y"))
+            # Получаем предпочитаемые дни тренировок
+            preferred_days_str = runner_profile.get('preferred_training_days', '')
+            preferred_days = []
             
-            # Для промпта OpenAI используем первый и второй день
-            first_day_str = dates[0]
-            second_day_str = dates[1]
+            if preferred_days_str:
+                # Словарь для преобразования сокращений дней недели в числа (0 - понедельник, 6 - воскресенье)
+                day_name_to_number = {
+                    'пн': 0, 'вт': 1, 'ср': 2, 'чт': 3, 'пт': 4, 'сб': 5, 'вс': 6,
+                    'понедельник': 0, 'вторник': 1, 'среда': 2, 'четверг': 3, 
+                    'пятница': 4, 'суббота': 5, 'воскресенье': 6
+                }
+                
+                # Разбиваем строку предпочитаемых дней и преобразуем в числа
+                for day in preferred_days_str.lower().split(','):
+                    day = day.strip()
+                    if day in day_name_to_number:
+                        preferred_days.append(day_name_to_number[day])
+            
+            logging.info(f"Предпочитаемые дни недели для продолжения: {preferred_days}")
+            
+            # Если предпочитаемые дни не указаны, используем все дни недели
+            if not preferred_days:
+                preferred_days = list(range(7))  # 0 - понедельник, 6 - воскресенье
+            
+            # Количество тренировочных дней в неделю (по умолчанию 3)
+            training_days_count = int(runner_profile.get('training_days_per_week', 3))
+            
+            # Убедимся, что у нас достаточно дней для тренировок
+            if len(preferred_days) < training_days_count:
+                logging.warning(f"Недостаточно предпочитаемых дней ({len(preferred_days)}) для требуемого количества тренировок ({training_days_count}). Добавляем дополнительные дни.")
+                for i in range(7):
+                    if i not in preferred_days:
+                        preferred_days.append(i)
+                        if len(preferred_days) >= training_days_count:
+                            break
+            
+            # Если указано больше предпочитаемых дней, чем нужно для тренировок, используем все указанные дни
+            # НЕ сокращаем список, потому что это продолжение плана
+            
+            # Сортируем дни недели, чтобы они шли по порядку
+            preferred_days.sort()
+            
+            logging.info(f"Отсортированные предпочитаемые дни недели для продолжения: {preferred_days}")
+            
+            # Определяем ближайшие даты для тренировок с учетом предпочитаемых дней недели
+            training_dates = []
+            current_date = start_date
+            
+            # Проверяем, если стартовая дата раньше текущей даты, используем текущую
+            now = datetime.now(pytz.UTC).astimezone(moscow_tz)
+            if current_date.date() < now.date():
+                current_date = now
+                logging.warning(f"Стартовая дата в прошлом, используем текущую: {current_date.strftime('%d.%m.%Y')}")
+            
+            # Получаем день недели для стартовой даты (0 - понедельник, 6 - воскресенье)
+            start_weekday = current_date.weekday()
+            logging.info(f"День недели стартовой даты продолжения: {start_weekday} ({current_date.strftime('%A')})")
+            
+            # Находим первый подходящий день для начала тренировок
+            days_to_add = 0
+            if preferred_days:
+                # Ищем ближайший предпочитаемый день недели, начиная со стартовой даты
+                min_days_to_add = float('inf')
+                for day in preferred_days:
+                    # Вычисляем, сколько дней нужно добавить к стартовой дате
+                    if day >= start_weekday:
+                        days = day - start_weekday
+                    else:
+                        days = 7 - start_weekday + day
+                    
+                    if days < min_days_to_add:
+                        min_days_to_add = days
+                
+                days_to_add = min_days_to_add
+            
+            # Добавляем дни к стартовой дате, чтобы получить первый день тренировки
+            first_training_date = current_date + timedelta(days=days_to_add)
+            logging.info(f"Первый день продолжения тренировки: {first_training_date.strftime('%d.%m.%Y (%A)')}")
+            
+            # Генерируем даты для всех тренировочных дней
+            training_day_counter = 0
+            date_to_check = first_training_date
+            
+            while training_day_counter < training_days_count:
+                weekday = date_to_check.weekday()
+                
+                if weekday in preferred_days:
+                    training_dates.append(date_to_check)
+                    training_day_counter += 1
+                    logging.info(f"Добавлена дата продолжения тренировки: {date_to_check.strftime('%d.%m.%Y (%A)')}")
+                
+                date_to_check = date_to_check + timedelta(days=1)
+            
+            # Преобразуем даты в строки формата "ДД.ММ.YYYY" для использования в плане
+            dates = [date.strftime("%d.%m.%Y") for date in training_dates]
+            
+            # Преобразуем числовые дни недели в названия для промпта
+            day_number_to_name = {
+                0: "Понедельник (Пн)", 
+                1: "Вторник (Вт)", 
+                2: "Среда (Ср)", 
+                3: "Четверг (Чт)", 
+                4: "Пятница (Пт)", 
+                5: "Суббота (Сб)", 
+                6: "Воскресенье (Вс)"
+            }
+            
+            preferred_days_names = [day_number_to_name[day] for day in preferred_days]
+            preferred_days_text = ", ".join(preferred_days_names)
+            
+            # Получаем словарь дат тренировок с днями недели
+            training_dates_with_weekdays = {}
+            for date in training_dates:
+                weekday_num = date.weekday()
+                weekday_name = day_number_to_name[weekday_num]
+                date_str = date.strftime("%d.%m.%Y")
+                training_dates_with_weekdays[date_str] = weekday_name
+            
+            # Форматируем информацию о датах тренировок для промпта
+            training_dates_info = "\n".join([f"- {date}: {weekday}" for date, weekday in training_dates_with_weekdays.items()])
+            
+            # Для промпта OpenAI используем первый день тренировки
+            first_day_str = dates[0] if dates else start_date.strftime("%d.%m.%Y")
+            # Если есть второй день тренировки, используем его, иначе используем день после первого
+            second_day_str = dates[1] if len(dates) > 1 else (training_dates[0] + timedelta(days=1)).strftime("%d.%m.%Y") if training_dates else (start_date + timedelta(days=1)).strftime("%d.%m.%Y")
             
             logging.info(f"Сгенерированные даты для продолжения плана: {dates}")
             logging.info(f"Первый день: {first_day_str}, второй день: {second_day_str}")
@@ -462,13 +715,17 @@ class OpenAIService:
                     messages=[
                         {"role": "system", "content": 
                          f"Ты опытный беговой тренер. Твоя задача - создать продолжение персонализированного плана "
-                         f"тренировок на 7 дней, основываясь на профиле бегуна и на результатах предыдущих тренировок. "
-                         f"План ДОЛЖЕН ОБЯЗАТЕЛЬНО начинаться с даты ({first_day_str}), а второй день должен быть ({second_day_str}). "
-                         f"План должен быть структурирован по дням недели с конкретными датами (каждый день должен иметь правильную календарную дату). "
-                         f"ОБЯЗАТЕЛЬНО используй даты начиная с {first_day_str} для тренировок, это критически важно! "
-                         f"План должен включать детальное описание каждой тренировки (дистанция, темп, тип тренировки). "
+                         f"тренировок для бегуна, используя ТОЛЬКО указанные даты в точном соответствии с предпочтениями пользователя.\n\n"
+                         f"Пользователь выбрал следующие предпочитаемые дни недели для тренировок: {preferred_days_text}.\n"
+                         f"На основе этого выбора и указанной даты начала тренировок, были определены следующие даты тренировок:\n{training_dates_info}\n\n"
+                         f"ВАЖНО: План тренировок должен включать ТОЛЬКО ЭТИ ДАТЫ и ДНИ НЕДЕЛИ. "
+                         f"НЕ ДОБАВЛЯЙ дополнительные дни тренировок кроме указанных выше дат.\n\n"
+                         f"План должен быть структурирован строго по этим дням недели с указанными датами.\n\n"
+                         f"Каждый день в плане должен обязательно содержать: день недели (например, 'Вторник'), "
+                         f"дату в формате ДД.ММ.YYYY (например, '07.05.2025'), тип тренировки, дистанцию, целевой темп "
+                         f"и детальное описание тренировки.\n\n"
                          f"Учитывай, что бегун стал сильнее после завершения предыдущего плана, поэтому новый план должен "
-                         f"быть более интенсивным, с увеличенным километражем и сложностью. "
+                         f"быть более интенсивным, с увеличенным километражем и сложностью.\n\n"
                          f"Отвечай только в указанном JSON формате на русском языке."
                         },
                         {"role": "user", "content": prompt}
