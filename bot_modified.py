@@ -3,7 +3,7 @@ import json
 import io
 from datetime import datetime, timedelta
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 
 from config import TELEGRAM_TOKEN, logging, STATES
 from models import create_tables
@@ -64,6 +64,7 @@ async def help_command(update, context):
         "👋 Привет! Я бот-помощник для бегунов. Вот что я могу:\n\n"
         "/plan - Создать или просмотреть план тренировок\n"
         "/pending - Показать только незавершенные тренировки\n"
+        "/update - Обновить ваш профиль бегуна\n"
         "/help - Показать это сообщение с командами\n\n"
         "📱 Вы также можете отправить мне скриншот из вашего трекера тренировок (Nike Run, Strava, Garmin и др.), "
         "и я автоматически проанализирую его и зачту вашу тренировку!\n\n"
@@ -1640,6 +1641,53 @@ def setup_bot():
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CommandHandler("pending", pending_trainings_command))
     
+    # Добавляем обработчик команды обновления профиля
+    async def update_profile_command(update, context):
+        """Handler for the /update command - starts runner profile update dialog."""
+        user = update.effective_user
+        telegram_id = user.id
+        
+        # Получаем id пользователя в БД
+        db_user_id = DBManager.get_user_id(telegram_id)
+        if not db_user_id:
+            await update.message.reply_text(
+                "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
+            )
+            return
+        
+        # Получаем текущий профиль бегуна
+        runner_profile = DBManager.get_runner_profile(db_user_id)
+        if not runner_profile:
+            await update.message.reply_text(
+                "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
+            )
+            return
+        
+        # Создаем новую сессию обновления профиля
+        conversation = RunnerProfileConversation()
+        
+        # Начинаем диалог обновления профиля с первого шага - дистанции
+        # Показываем текущее значение для каждого поля
+        context.user_data['db_user_id'] = db_user_id
+        context.user_data['profile_data'] = {}
+        
+        # Запрос новой дистанции
+        await update.message.reply_text(
+            f"Начинаем обновление вашего профиля бегуна.\n"
+            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+            f"Введите новую целевую дистанцию (в км):",
+            reply_markup=ReplyKeyboardMarkup(
+                [['5', '10'], ['21', '42']], 
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
+        
+        return STATES['DISTANCE']
+        
+    application.add_handler(CommandHandler("update", update_profile_command))
+    
     # Add conversation handler for profile creation
     conversation = RunnerProfileConversation()
     application.add_handler(conversation.get_conversation_handler())
@@ -1872,28 +1920,24 @@ def setup_bot():
                 )
                 
         elif text == "✏️ Обновить мой профиль":
-            # Начинаем диалог обновления профиля
-            # Создаем новый объект RunnerProfileConversation
-            from conversation import RunnerProfileConversation
-            conversation = RunnerProfileConversation()
-            
+            # Запускаем функцию обновления профиля напрямую, имитируя команду /update
             # Получаем текущий профиль бегуна
             runner_profile = DBManager.get_runner_profile(db_user_id)
             if runner_profile:
-                # Запускаем процесс обновления профиля
-                # Сохраняем db_user_id в контексте диалога
-                if not hasattr(context, 'user_data'):
-                    context.user_data = {}
+                # Создаем новую сессию обновления профиля
+                
+                # Начинаем диалог обновления профиля с первого шага - дистанции
+                # Показываем текущее значение для каждого поля
                 context.user_data['db_user_id'] = db_user_id
-                context.user_data['updating_profile'] = True
+                context.user_data['profile_data'] = {}
                 
-                # Запускаем процесс обновления с команды /update
+                # Запрос новой дистанции
                 from telegram import ReplyKeyboardMarkup
-                
                 await update.message.reply_text(
-                    f"Хорошо, давайте обновим ваш профиль бегуна. "
+                    f"Начинаем обновление вашего профиля бегуна.\n"
                     f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
-                    f"Начнем с целевой дистанции. Текущее значение: {runner_profile.get('distance', 'Не указано')} км.",
+                    f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+                    f"Введите новую целевую дистанцию (в км):",
                     reply_markup=ReplyKeyboardMarkup(
                         [['5', '10'], ['21', '42']], 
                         one_time_keyboard=True,
@@ -1901,7 +1945,6 @@ def setup_bot():
                     )
                 )
                 
-                # Переход к состоянию ввода дистанции
                 return STATES['DISTANCE']
             else:
                 # Если профиль не найден, предложим создать новый
