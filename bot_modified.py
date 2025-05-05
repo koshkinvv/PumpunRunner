@@ -218,8 +218,8 @@ async def generate_plan_command(update, context):
                 )
                 
                 await update.message.reply_text(
-                    "Этот бот создан с любовью к моей невесте Пумпуни ❤️, а она очень хочет поехать " + 
-                    "на Лондонский Марафон 2026 года. По этому бот стоит 500 рублей в месяц с " + 
+                    "Этот бот создан с любовью к моей невесте Пумпуне ❤️, а она очень хочет поехать " + 
+                    "на Лондонский Марафон 2026 года. Поэтому бот стоит 500 рублей в месяц с " + 
                     "гарантией добавления новых фичей и легкой отменой подписки!",
                     reply_markup=reply_markup
                 )
@@ -313,8 +313,8 @@ async def generate_plan_command(update, context):
             )
             
             await update.message.reply_text(
-                "Этот бот создан с любовью к моей невесте Пумпуни ❤️, а она очень хочет поехать " + 
-                "на Лондонский Марафон 2026 года. По этому бот стоит 500 рублей в месяц с " + 
+                "Этот бот создан с любовью к моей невесте Пумпуне ❤️, а она очень хочет поехать " + 
+                "на Лондонский Марафон 2026 года. Поэтому бот стоит 500 рублей в месяц с " + 
                 "гарантией добавления новых фичей и легкой отменой подписки!",
                 reply_markup=reply_markup
             )
@@ -498,8 +498,8 @@ async def callback_query_handler(update, context):
             )
             
             await query.message.reply_text(
-                "Этот бот создан с любовью к моей невесте Пумпуни ❤️, а она очень хочет поехать " + 
-                "на Лондонский Марафон 2026 года. По этому бот стоит 500 рублей в месяц с " + 
+                "Этот бот создан с любовью к моей невесте Пумпуне ❤️, а она очень хочет поехать " + 
+                "на Лондонский Марафон 2026 года. Поэтому бот стоит 500 рублей в месяц с " + 
                 "гарантией добавления новых фичей и легкой отменой подписки!",
                 reply_markup=reply_markup
             )
@@ -1140,11 +1140,11 @@ async def callback_query_handler(update, context):
                         [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
                         [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
                     ])
-
+                    
+                    await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+                
                 # Отправляем приглашение в чат БЕТА тестеров
                 await query.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
-                
-                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
                 
                 # Показываем главное меню после генерации плана
                 await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
