@@ -1,330 +1,147 @@
 #!/bin/bash
-# Скрипт для обслуживания системы непрерывной работы бота
-# Включает очистку логов, проверку состояния и возможность перезапуска
+# Скрипт обслуживания и мониторинга бота в режиме 24/7
 
-# Цветной вывод
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
+# Создаем директорию для логов, если она отсутствует
+mkdir -p logs
 
-# Функция для отображения меню
-show_menu() {
-    clear
-    echo -e "${BLUE}=====================================================${NC}"
-    echo -e "${GREEN}Обслуживание системы непрерывной работы бота 24/7${NC}"
-    echo -e "${BLUE}=====================================================${NC}"
-    echo ""
-    echo -e "${YELLOW}1.${NC} Проверить состояние бота"
-    echo -e "${YELLOW}2.${NC} Перезапустить систему"
-    echo -e "${YELLOW}3.${NC} Очистить старые логи"
-    echo -e "${YELLOW}4.${NC} Архивировать логи"
-    echo -e "${YELLOW}5.${NC} Показать последние ошибки"
-    echo -e "${YELLOW}6.${NC} Показать использование ресурсов"
-    echo -e "${YELLOW}0.${NC} Выйти"
-    echo ""
-    echo -n "Выберите действие (0-6): "
+# Файл лога обслуживания
+MAINTENANCE_LOG="logs/maintenance.log"
+
+# Функция для записи в лог
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> $MAINTENANCE_LOG
 }
 
-# Функция для проверки состояния бота
-check_status() {
-    echo -e "${BLUE}Проверка состояния бота...${NC}"
-    echo ""
+# Запись о запуске
+log "Запуск скрипта обслуживания"
+
+# Функция для проверки доступного дискового пространства
+check_disk_space() {
+    log "Проверка дискового пространства"
+    DISK_USAGE=$(df -h . | awk 'NR==2 {print $5}' | sed 's/%//')
+    log "Использование диска: $DISK_USAGE%"
     
-    # Проверка файла здоровья
-    if [ -f "bot_health.txt" ]; then
-        health_time=$(cat bot_health.txt)
-        echo -e "Файл здоровья: ${GREEN}Существует${NC}"
-        echo -e "Последнее обновление: ${GREEN}$health_time${NC}"
+    if [ "$DISK_USAGE" -gt 90 ]; then
+        log "ВНИМАНИЕ: Мало свободного места на диске ($DISK_USAGE%)"
+        # Очистка старых логов при необходимости
+        find logs -name "*.log" -type f -mtime +7 -delete
+        log "Удалены логи старше 7 дней"
+    fi
+}
+
+# Функция для проверки использования памяти
+check_memory_usage() {
+    log "Проверка использования памяти"
+    MEMORY_USAGE=$(free -m | awk 'NR==2 {print int($3*100/$2)}')
+    log "Использование памяти: $MEMORY_USAGE%"
+    
+    if [ "$MEMORY_USAGE" -gt 90 ]; then
+        log "ВНИМАНИЕ: Высокое использование памяти ($MEMORY_USAGE%)"
+    fi
+}
+
+# Функция для проверки работоспособности процессов
+check_processes() {
+    log "Проверка процессов бота"
+    
+    # Проверяем, работает ли скрипт run_24_7.sh
+    if ! pgrep -f "bash.*run_24_7.sh" > /dev/null; then
+        log "КРИТИЧЕСКАЯ ОШИБКА: Скрипт run_24_7.sh не запущен! Перезапуск..."
+        nohup ./start_24_7.sh > logs/start_24_7_auto.log 2>&1 &
+        log "Запущен скрипт start_24_7.sh"
+    else
+        log "Скрипт run_24_7.sh работает"
+    fi
+    
+    # Проверяем, работает ли бот
+    if ! pgrep -f "python.*run_telegram_bot.py" > /dev/null; then
+        log "ОШИБКА: Бот не запущен!"
+    else
+        log "Бот работает"
+    fi
+    
+    # Проверяем, работает ли веб-приложение
+    if ! pgrep -f "python.*app.py" > /dev/null; then
+        log "ОШИБКА: Веб-приложение не запущено!"
+    else
+        log "Веб-приложение работает"
+    fi
+}
+
+# Функция для проверки файла здоровья бота
+check_health_file() {
+    log "Проверка файла здоровья бота"
+    
+    if [ -f bot_health.txt ]; then
+        HEALTH_TIME=$(cat bot_health.txt)
+        CURRENT_TIME=$(date +%s)
+        TIME_DIFF=$((CURRENT_TIME - HEALTH_TIME))
         
-        # Проверка актуальности файла здоровья
-        current_time=$(date +%s)
-        health_time_sec=$(date -d "$health_time" +%s 2>/dev/null)
-        if [ $? -eq 0 ]; then
-            time_diff=$((current_time - health_time_sec))
-            if [ $time_diff -gt 300 ]; then
-                echo -e "Статус: ${RED}Устарел ($time_diff секунд назад)${NC}"
-            else
-                echo -e "Статус: ${GREEN}Актуален${NC}"
-            fi
-        else
-            echo -e "Статус: ${YELLOW}Невозможно определить возраст${NC}"
+        log "Последнее обновление файла здоровья: $TIME_DIFF секунд назад"
+        
+        if [ $TIME_DIFF -gt 300 ]; then
+            log "ВНИМАНИЕ: Файл здоровья устарел ($TIME_DIFF секунд)"
         fi
     else
-        echo -e "Файл здоровья: ${RED}Отсутствует${NC}"
+        log "ОШИБКА: Файл здоровья отсутствует"
     fi
-    
-    echo ""
-    
-    # Проверка запущенных процессов
-    echo "Запущенные процессы:"
-    echo "-----------------"
-    
-    if pgrep -f "python.*main.py" > /dev/null; then
-        echo -e "Основной бот: ${GREEN}Запущен${NC}"
-    else
-        echo -e "Основной бот: ${RED}Не запущен${NC}"
-    fi
-    
-    if pgrep -f "python.*bot_monitor.py" > /dev/null; then
-        echo -e "Монитор бота: ${GREEN}Запущен${NC}"
-    else
-        echo -e "Монитор бота: ${RED}Не запущен${NC}"
-    fi
-    
-    if pgrep -f "gunicorn.*main:app" > /dev/null; then
-        echo -e "Веб-интерфейс: ${GREEN}Запущен${NC}"
-    else
-        echo -e "Веб-интерфейс: ${RED}Не запущен${NC}"
-    fi
-    
-    if pgrep -f "python.*auto_recovery.py" > /dev/null; then
-        echo -e "Система восстановления: ${GREEN}Запущена${NC}"
-    else
-        echo -e "Система восстановления: ${RED}Не запущена${NC}"
-    fi
-    
-    if pgrep -f "python.*keep_alive.py" > /dev/null; then
-        echo -e "Keep Alive: ${GREEN}Запущен${NC}"
-    else
-        echo -e "Keep Alive: ${RED}Не запущен${NC}"
-    fi
-    
-    echo ""
-    echo "Нажмите Enter для возврата в меню..."
-    read
 }
 
-# Функция для перезапуска системы
-restart_system() {
-    echo -e "${BLUE}Перезапуск системы...${NC}"
-    echo ""
-    echo -e "${YELLOW}Останавливаем все процессы...${NC}"
+# Функция для проверки логов на наличие ошибок
+check_logs_for_errors() {
+    log "Проверка логов на наличие ошибок"
     
-    pkill -f "python.*main.py" || true
-    pkill -f "python.*bot_monitor.py" || true
-    pkill -f "python.*auto_recovery.py" || true
-    pkill -f "python.*keep_alive.py" || true
-    pkill -f "gunicorn.*main:app" || true
-    pkill -f "bash.*run_24_7.sh" || true
+    # Ищем критические ошибки в логах бота
+    ERROR_COUNT=$(grep -c -i "error\|exception\|traceback" logs/bot_output.log 2>/dev/null || echo "0")
+    log "Найдено $ERROR_COUNT ошибок в логах бота"
     
-    echo "Ждем завершения процессов..."
-    sleep 5
-    
-    echo -e "${YELLOW}Запускаем систему...${NC}"
-    bash start_24_7.sh
-    
-    echo ""
-    echo "Система перезапущена. Нажмите Enter для возврата в меню..."
-    read
+    if [ "$ERROR_COUNT" -gt 0 ]; then
+        log "Последние ошибки из лога бота:"
+        grep -i "error\|exception\|traceback" logs/bot_output.log | tail -5 >> $MAINTENANCE_LOG
+    fi
 }
 
-# Функция для очистки старых логов
-clean_logs() {
-    echo -e "${BLUE}Очистка старых логов...${NC}"
-    echo ""
+# Функция для очистки устаревших логов
+clean_old_logs() {
+    log "Очистка устаревших логов"
     
-    if [ ! -d "logs" ]; then
-        echo "Директория logs не существует."
-        echo ""
-        echo "Нажмите Enter для возврата в меню..."
-        read
-        return
-    fi
+    # Удаление логов старше 30 дней
+    find logs -name "*.log" -type f -mtime +30 -delete
+    log "Удалены логи старше 30 дней"
     
-    # Подсчет количества и размера логов
-    log_count=$(find logs -type f | wc -l)
-    log_size=$(du -sh logs | cut -f1)
-    
-    echo -e "Текущее количество файлов логов: ${YELLOW}$log_count${NC}"
-    echo -e "Общий размер логов: ${YELLOW}$log_size${NC}"
-    echo ""
-    
-    echo -n "Очистить логи старше (дней, по умолчанию 7): "
-    read days
-    
-    # Если пользователь не ввел значение, используем 7 дней
-    if [ -z "$days" ]; then
-        days=7
-    fi
-    
-    # Проверяем, является ли введенное значение числом
-    if ! [[ "$days" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Ошибка: '$days' не является числом.${NC}"
-        echo ""
-        echo "Нажмите Enter для возврата в меню..."
-        read
-        return
-    fi
-    
-    echo -e "${YELLOW}Удаление логов старше $days дней...${NC}"
-    
-    # Поиск и удаление файлов старше указанного количества дней
-    old_logs=$(find logs -type f -mtime +$days)
-    old_count=$(echo "$old_logs" | grep -v '^$' | wc -l)
-    
-    if [ $old_count -eq 0 ]; then
-        echo "Нет логов старше $days дней."
-    else
-        echo "Найдено $old_count логов старше $days дней:"
-        echo "$old_logs" | while read log; do
-            echo "  - $log"
-            rm "$log"
-        done
-        echo -e "${GREEN}Старые логи удалены.${NC}"
-    fi
-    
-    echo ""
-    echo "Нажмите Enter для возврата в меню..."
-    read
+    # Сжатие логов старше 7 дней
+    find logs -name "*.log" -type f -mtime +7 -not -name "*.gz" | while read logfile; do
+        gzip -f "$logfile"
+        log "Сжат файл: $logfile"
+    done
 }
 
-# Функция для архивирования логов
-archive_logs() {
-    echo -e "${BLUE}Архивирование логов...${NC}"
-    echo ""
+# Функция для обновления статистики
+update_stats() {
+    log "Обновление статистики"
     
-    if [ ! -d "logs" ]; then
-        echo "Директория logs не существует."
-        echo ""
-        echo "Нажмите Enter для возврата в меню..."
-        read
-        return
-    fi
+    # Сбор статистики по запущенным процессам
+    PROCESS_COUNT=$(ps aux | grep -v grep | grep -c python)
+    log "Запущено $PROCESS_COUNT процессов Python"
     
-    # Создаем директорию для архивов, если она не существует
-    mkdir -p logs_archive
-    
-    # Запрашиваем опции архивирования
-    echo -n "Архивировать логи старше (дней, по умолчанию все): "
-    read days
-    
-    archive_name="logs_$(date +%Y%m%d_%H%M%S).tar.gz"
-    
-    if [ -z "$days" ] || ! [[ "$days" =~ ^[0-9]+$ ]]; then
-        # Архивируем все логи
-        echo -e "${YELLOW}Архивирование всех логов...${NC}"
-        tar -czf "logs_archive/$archive_name" logs
-    else
-        # Архивируем логи старше указанного количества дней
-        echo -e "${YELLOW}Архивирование логов старше $days дней...${NC}"
-        find logs -type f -mtime +$days -print0 | tar -czf "logs_archive/$archive_name" --null -T -
-    fi
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Архив создан: logs_archive/$archive_name${NC}"
-        
-        # Спрашиваем, нужно ли удалить заархивированные логи
-        echo -n "Удалить заархивированные логи? (y/n, по умолчанию n): "
-        read delete
-        
-        if [ "$delete" = "y" ] || [ "$delete" = "Y" ]; then
-            if [ -z "$days" ] || ! [[ "$days" =~ ^[0-9]+$ ]]; then
-                # Удаляем все логи
-                rm -f logs/*
-                echo -e "${GREEN}Все логи удалены.${NC}"
-            else
-                # Удаляем логи старше указанного количества дней
-                find logs -type f -mtime +$days -delete
-                echo -e "${GREEN}Удалены логи старше $days дней.${NC}"
-            fi
-        fi
-    else
-        echo -e "${RED}Ошибка при создании архива.${NC}"
-    fi
-    
-    echo ""
-    echo "Нажмите Enter для возврата в меню..."
-    read
+    # Сбор статистики по использованию CPU
+    CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+    log "Использование CPU: $CPU_USAGE%"
 }
 
-# Функция для отображения последних ошибок
-show_errors() {
-    echo -e "${BLUE}Последние ошибки из логов...${NC}"
-    echo ""
-    
-    if [ ! -d "logs" ]; then
-        echo "Директория logs не существует."
-        echo ""
-        echo "Нажмите Enter для возврата в меню..."
-        read
-        return
-    fi
-    
-    # Поиск ошибок в файлах логов
-    echo -e "${YELLOW}Поиск ошибок в логах...${NC}"
-    
-    # Поиск по ключевым словам ошибок
-    grep_result=$(grep -i -e "error" -e "exception" -e "traceback" -e "failed" -e "critical" logs/* 2>/dev/null | tail -n 50)
-    
-    if [ -z "$grep_result" ]; then
-        echo "Ошибки не найдены."
-    else
-        echo "Последние 50 ошибок из всех логов:"
-        echo "---------------------------------"
-        echo "$grep_result"
-    fi
-    
-    echo ""
-    echo "Нажмите Enter для возврата в меню..."
-    read
-}
+# Выполняем все функции обслуживания
+check_disk_space
+check_memory_usage
+check_processes
+check_health_file
+check_logs_for_errors
+update_stats
 
-# Функция для отображения использования ресурсов
-show_resources() {
-    echo -e "${BLUE}Использование ресурсов...${NC}"
-    echo ""
-    
-    echo -e "${YELLOW}Использование CPU:${NC}"
-    ps -eo pid,ppid,cmd,%cpu,%mem --sort=-%cpu | head -n 11
-    
-    echo -e "\n${YELLOW}Использование памяти:${NC}"
-    ps -eo pid,ppid,cmd,%cpu,%mem --sort=-%mem | head -n 11
-    
-    echo -e "\n${YELLOW}Общее использование системы:${NC}"
-    free -h
-    
-    echo -e "\n${YELLOW}Использование диска:${NC}"
-    df -h .
-    
-    echo ""
-    echo "Нажмите Enter для возврата в меню..."
-    read
-}
+# Запускаем очистку логов раз в неделю (по воскресеньям)
+if [ "$(date +%u)" = "7" ]; then
+    log "Сегодня воскресенье, выполняем очистку старых логов"
+    clean_old_logs
+fi
 
-# Основной цикл
-while true; do
-    show_menu
-    read choice
-    
-    case $choice in
-        1)
-            check_status
-            ;;
-        2)
-            restart_system
-            ;;
-        3)
-            clean_logs
-            ;;
-        4)
-            archive_logs
-            ;;
-        5)
-            show_errors
-            ;;
-        6)
-            show_resources
-            ;;
-        0)
-            echo "Выход из программы..."
-            exit 0
-            ;;
-        *)
-            echo "Некорректный выбор. Пожалуйста, выберите опцию 0-6."
-            echo "Нажмите Enter для продолжения..."
-            read
-            ;;
-    esac
-done
+log "Завершение скрипта обслуживания"
+echo "Обслуживание завершено. Подробности в логе: $MAINTENANCE_LOG"
