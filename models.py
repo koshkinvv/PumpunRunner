@@ -50,6 +50,39 @@ def create_tables():
         )
         """)
         
+        # Проверяем наличие колонок и добавляем их, если они отсутствуют
+        try:
+            # Проверяем наличие колонки training_days_per_week
+            cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='runner_profiles' AND column_name='training_days_per_week'
+            """)
+            if not cursor.fetchone():
+                cursor.execute("""
+                ALTER TABLE runner_profiles 
+                ADD COLUMN training_days_per_week INTEGER
+                """)
+                logging.info("Added column training_days_per_week to runner_profiles table")
+            
+            # Проверяем наличие колонки preferred_training_days
+            cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='runner_profiles' AND column_name='preferred_training_days'
+            """)
+            if not cursor.fetchone():
+                cursor.execute("""
+                ALTER TABLE runner_profiles 
+                ADD COLUMN preferred_training_days VARCHAR(255)
+                """)
+                logging.info("Added column preferred_training_days to runner_profiles table")
+                
+            conn.commit()
+        except Exception as e:
+            logging.error(f"Error adding columns to runner_profiles table: {e}")
+            conn.rollback()
+        
         # Create training_plans table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS training_plans (
