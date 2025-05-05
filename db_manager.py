@@ -468,6 +468,152 @@ class DBManager:
                 conn.close()
                 
     @staticmethod
+    def save_payment_status(user_id, payment_agreed):
+        """
+        Save a user's payment status to the database.
+        
+        Args:
+            user_id: Database user ID
+            payment_agreed: Boolean indicating whether the user agreed to pay
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                # Check if user already has a payment record
+                cursor.execute(
+                    "SELECT id FROM user_payments WHERE user_id = %s",
+                    (user_id,)
+                )
+                payment_record = cursor.fetchone()
+                
+                # Get current timestamp for payment date
+                now = datetime.now()
+                
+                # Calculate expiry date (30 days from now)
+                expiry_date = now.replace(month=now.month + 1) if now.month < 12 else now.replace(year=now.year + 1, month=1)
+                
+                if payment_record:
+                    # Update existing payment record
+                    query = """
+                    UPDATE user_payments SET 
+                        payment_agreed = %s,
+                        payment_date = %s,
+                        expiry_date = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = %s
+                    """
+                    cursor.execute(query, (payment_agreed, now, expiry_date, user_id))
+                else:
+                    # Insert new payment record
+                    query = """
+                    INSERT INTO user_payments (
+                        user_id, payment_agreed, payment_date, expiry_date
+                    ) VALUES (
+                        %s, %s, %s, %s
+                    )
+                    """
+                    cursor.execute(query, (user_id, payment_agreed, now, expiry_date))
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            logging.error(f"Error saving payment status: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
+    def get_payment_status(user_id):
+        """
+        Get a user's payment status from the database.
+        
+        Args:
+            user_id: Database user ID
+            
+        Returns:
+            Dictionary with payment status or None if not found
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                cursor.execute(
+                    """
+                    SELECT * FROM user_payments 
+                    WHERE user_id = %s 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                payment_record = cursor.fetchone()
+                
+                if payment_record:
+                    return dict(payment_record)
+                return None
+                
+        except Exception as e:
+            logging.error(f"Error getting payment status: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+    
+    @staticmethod
+    def check_active_subscription(user_id):
+        """
+        Check if a user has an active subscription.
+        
+        Args:
+            user_id: Database user ID
+            
+        Returns:
+            Boolean indicating whether the user has an active subscription
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payment_agreed, expiry_date FROM user_payments 
+                    WHERE user_id = %s 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                payment_record = cursor.fetchone()
+                
+                if not payment_record:
+                    return False
+                    
+                payment_agreed, expiry_date = payment_record
+                
+                # If payment not agreed, return False
+                if not payment_agreed:
+                    return False
+                    
+                # Check if subscription is still active
+                now = datetime.now()
+                return now < expiry_date
+                
+        except Exception as e:
+            logging.error(f"Error checking active subscription: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    @staticmethod
     def get_all_users_with_plans():
         """
         Получает всех пользователей, у которых есть планы тренировок.

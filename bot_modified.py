@@ -2052,8 +2052,11 @@ def setup_bot():
                 # Сбрасываем флаг ожидания оплаты
                 context.user_data['awaiting_payment_confirmation'] = False
                 
-                # Отмечаем согласие на оплату (можно добавить в профиль пользователя)
+                # Отмечаем согласие на оплату
                 context.user_data['payment_agreed'] = True
+                
+                # Сохраняем статус оплаты в базе данных
+                DBManager.save_payment_status(db_user_id, True)
                 
                 # Отправляем сообщение об успешной подписке
                 await update.message.reply_text(
@@ -2073,6 +2076,9 @@ def setup_bot():
                 
                 # Отмечаем отказ от оплаты
                 context.user_data['payment_agreed'] = False
+                
+                # Сохраняем статус оплаты в базе данных
+                DBManager.save_payment_status(db_user_id, False)
                 
                 # Отправляем сообщение о будущей бесплатной версии
                 await update.message.reply_text(

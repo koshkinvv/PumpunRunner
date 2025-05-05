@@ -108,6 +108,20 @@ def create_tables():
         )
         """)
         
+        # Create user_payments table for tracking payment status
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_payments (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            payment_agreed BOOLEAN DEFAULT FALSE,
+            payment_date TIMESTAMP,
+            expiry_date TIMESTAMP,
+            payment_amount FLOAT DEFAULT 500.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
         conn.commit()
         logging.info("Tables created successfully")
     except Exception as e:
