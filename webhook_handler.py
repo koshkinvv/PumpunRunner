@@ -664,12 +664,17 @@ def handle_callback_query(application, update_data):
                 # Сообщаем пользователю о начале генерации нового плана
                 send_telegram_message(chat_id, "🔄 Генерирую новый план тренировок с учетом вашего прогресса...")
                 
-                # Импортируем генератор плана
+                # Импортируем генератор плана и сервис OpenAI
                 try:
-                    from openai_service import generate_training_plan
+                    from openai_service import OpenAIService
                     from bot_modified import format_training_plan_message
-                except ImportError:
-                    logger.error("Не удалось импортировать генератор планов тренировок")
+                    
+                    # Создаем экземпляр OpenAIService
+                    openai_service = OpenAIService()
+                    # Функция generate_training_plan доступна как метод
+                    generate_training_plan = openai_service.generate_training_plan
+                except ImportError as e:
+                    logger.error(f"Не удалось импортировать генератор планов тренировок: {e}", exc_info=True)
                     send_telegram_message(chat_id, "❌ Произошла ошибка при генерации плана. Пожалуйста, попробуйте позже.")
                     return
                 
@@ -848,16 +853,24 @@ def send_message_with_keyboard(chat_id, text, keyboard, parse_mode=None):
         data = {
             "chat_id": chat_id,
             "text": text,
-            "reply_markup": json.dumps(reply_markup)
+            "reply_markup": reply_markup  # Отправляем напрямую без json.dumps
         }
         
         if parse_mode:
             data["parse_mode"] = parse_mode
+        
+        logger.info(f"Отправляем сообщение с клавиатурой для {chat_id}: {text[:50]}...")
+        logger.info(f"Клавиатура: {keyboard}")
             
         response = requests.post(url, json=data)
+        response_data = response.json()
         
-        if response.status_code != 200:
+        if response.status_code == 200 and response_data.get('ok'):
+            logger.info(f"Сообщение с клавиатурой успешно отправлено: message_id={response_data.get('result', {}).get('message_id')}")
+            return response_data.get('result', {}).get('message_id')
+        else:
             logger.error(f"Ошибка при отправке сообщения с клавиатурой: {response.text}")
+            logger.error(f"Данные запроса: {data}")
     except Exception as e:
         logger.error(f"Ошибка при отправке сообщения с клавиатурой: {e}", exc_info=True)
 
