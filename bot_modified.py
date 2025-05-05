@@ -457,7 +457,11 @@ async def callback_query_handler(update, context):
     
     elif query.data == "update_profile_first":
         # Пользователь решил сначала обновить профиль
-        await update_profile_command(update, context)
+        # Просто отправляем сообщение с соответствующей кнопкой из главного меню
+        await query.message.reply_text("✏️ Обновить мой профиль")
+        
+        # Показываем главное меню
+        await send_main_menu(update, context, "Выберите действие после обновления профиля")
         return
     
     elif query.data == "cancel_new_plan":
