@@ -76,10 +76,6 @@ mode = "parallel"
 task = "shell.exec"
 args = "bash start_24_7.sh"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python keep_alive.py"
-
 [[ports]]
 localPort = 5000
 externalPort = 80
