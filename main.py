@@ -169,85 +169,54 @@ def main():
     # Setup logging
     setup_logging()
     
-    logging.info("Вызываем run_one_bot.py для запуска единственного экземпляра бота...")
+    # Сбрасываем сессию Telegram API
+    logging.info("Сброс сессии Telegram API...")
     try:
-        # Импортируем функции из run_one_bot.py
-        import run_one_bot
-        
-        # Останавливаем все запущенные экземпляры бота
-        run_one_bot.kill_all_bot_processes()
-        
-        # Запускаем deploy_bot.py
-        run_one_bot.run_deploy_bot()
-        
-        logging.info("Бот успешно запущен через run_one_bot.py")
-        
-        # Ждем, чтобы процесс main.py не завершился сразу
-        while True:
-            time.sleep(60)
-            logging.info("main.py: мониторинг работы бота...")
-            
+        # Импортируем функцию сброса из нашего скрипта
+        from start_bot_directly import reset_telegram_api
+        reset_telegram_api()
+        logging.info("Сессия Telegram API успешно сброшена")
     except Exception as e:
-        logging.error(f"Ошибка при запуске через run_one_bot.py: {e}")
+        logging.error(f"Ошибка при сбросе сессии Telegram API: {e}")
+    
+    # Пытаемся получить блокировку файла
+    lock_file_handle = try_lock_file()
+    if not lock_file_handle:
+        logging.critical("Не удалось получить блокировку файла после нескольких попыток. Выход.")
+        return
+    
+    # Настраиваем обновление файла здоровья
+    setup_health_update()
+    
+    try:
+        # Проверяем и убиваем другие экземпляры бота
+        check_and_kill_other_instances()
+        
+        # Запускаем планировщик напоминаний в отдельном потоке
+        reminder_thread = threading.Thread(target=start_reminder_loop, daemon=True)
+        reminder_thread.start()
+        logging.info("Планировщик напоминаний о тренировках запущен в отдельном потоке")
+        
+        # Запускаем бота напрямую
+        application = setup_bot()
+        logging.info("Telegram бот успешно настроен и запускается...")
+        
+        # Запускаем бота в режиме polling
+        application.run_polling(
+            drop_pending_updates=True,  # Игнорируем накопившиеся обновления
+            allowed_updates=None,       # Принимаем все типы обновлений
+            pool_timeout=30,
+            connect_timeout=30,
+            read_timeout=30,
+            write_timeout=30
+        )
+        
+    except Exception as e:
+        logging.error(f"Ошибка при запуске бота: {e}")
         logging.error(traceback.format_exc())
-        
-        # Если произошла ошибка при запуске через run_one_bot.py, 
-        # пробуем запустить бота по старому методу
-        logging.warning("Пробуем запустить бота по старому методу...")
-        
-        # Пытаемся получить блокировку файла
-        lock_file_handle = try_lock_file()
-        if not lock_file_handle:
-            logging.critical("Не удалось получить блокировку файла после нескольких попыток. Выход.")
-            return
-        
-        # Настраиваем обновление файла здоровья
-        setup_health_update()
-        
-        try:
-            # Проверяем и убиваем другие экземпляры бота
-            check_and_kill_other_instances()
-            
-            # Запускаем планировщик напоминаний в отдельном потоке
-            reminder_thread = threading.Thread(target=start_reminder_loop, daemon=True)
-            reminder_thread.start()
-            logging.info("Планировщик напоминаний о тренировках запущен в отдельном потоке")
-            
-            max_retries = 5
-            retry_count = 0
-            
-            while retry_count < max_retries:
-                try:
-                    # Get the bot application
-                    application = setup_bot()
-                    
-                    # Log startup message
-                    logging.info("Runner profile bot started successfully!")
-                    
-                    # Run the bot until the user sends a signal to stop it
-                    application.run_polling(drop_pending_updates=True)  # Игнорируем накопившиеся обновления
-                    
-                    # Если мы дошли сюда, значит бот завершился нормально
-                    break
-                    
-                except Exception as e:
-                    retry_count += 1
-                    logging.error(f"Ошибка в работе бота (попытка {retry_count}/{max_retries}): {e}")
-                    logging.error(traceback.format_exc())
-                    
-                    # Обновляем файл здоровья перед ожиданием
-                    update_health_check()
-                    
-                    if retry_count < max_retries:
-                        # Ждем перед повторной попыткой, увеличивая время ожидания с каждой попыткой
-                        wait_time = 10 * retry_count
-                        logging.info(f"Перезапуск бота через {wait_time} секунд...")
-                        time.sleep(wait_time)
-                    else:
-                        logging.critical("Превышено максимальное количество попыток перезапуска. Бот остановлен.")
-        finally:
-            # Освобождаем блокировку файла перед выходом
-            release_lock(lock_file_handle)
+    finally:
+        # Освобождаем блокировку файла перед выходом
+        release_lock(lock_file_handle)
 
 if __name__ == '__main__':
     main()
