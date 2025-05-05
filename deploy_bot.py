@@ -148,34 +148,71 @@ def monitor_bot_processes(bot_process, monitor_process):
         # Ждем 30 секунд перед следующей проверкой
         time.sleep(30)
 
-def check_external_bots_running():
-    """Проверяет, есть ли внешние боты, которые могут конфликтовать с нашим."""
+def reset_telegram_api_session():
+    """
+    Сбрасывает текущую сессию Telegram API для предотвращения конфликтов.
+    Удаляет вебхуки и делает несколько попыток сброса offset.
+    """
     try:
+        token = os.environ.get('TELEGRAM_TOKEN')
+        if not token:
+            logger.error("TELEGRAM_TOKEN не найден в переменных окружения!")
+            return False
+            
+        logger.info("Начинаем сброс сессии Telegram API...")
+        
         # Проверяем статус вебхука
-        webhook_info = os.popen(f"curl -s https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/getWebhookInfo").read()
+        webhook_info = os.popen(f"curl -s https://api.telegram.org/bot{token}/getWebhookInfo").read()
         logger.info(f"Webhook info: {webhook_info}")
         
         # Пытаемся удалить вебхук
-        delete_result = os.popen(f"curl -s https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/deleteWebhook").read()
+        delete_result = os.popen(f"curl -s https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true").read()
         logger.info(f"Delete webhook result: {delete_result}")
         
-        # Для дополнительной очистки, отправляем запрос с новым offset, чтобы сбросить сессию getUpdates
-        reset_result = os.popen(f"curl -s 'https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/getUpdates?offset=-1'").read()
-        logger.info(f"Reset getUpdates result: {reset_result}")
+        # Делаем несколько попыток сбросить сессию getUpdates с разными параметрами
+        success = False
+        for attempt in range(5):
+            try:
+                # Сброс с разными таймаутами и лимитами
+                reset_result = os.popen(f"curl -s 'https://api.telegram.org/bot{token}/getUpdates?offset=-1&limit=1&timeout={attempt+1}'").read()
+                logger.info(f"Reset attempt {attempt+1}: {reset_result}")
+                
+                if '"ok":true' in reset_result:
+                    success = True
+                
+                # Пауза между попытками увеличивается с каждым разом
+                time.sleep(3 + attempt*2)
+            except Exception as inner_err:
+                logger.error(f"Ошибка при попытке сброса #{attempt+1}: {inner_err}")
+        
+        # Дополнительная финальная попытка с большим таймаутом
+        if not success:
+            reset_final = os.popen(f"curl -s 'https://api.telegram.org/bot{token}/getUpdates?offset=-1&limit=1&timeout=10'").read()
+            logger.info(f"Final reset attempt: {reset_final}")
+        
+        # Даем API время на обработку наших запросов
+        logger.info("Ожидание 10 секунд после сброса сессии API...")
+        time.sleep(10)
         
         return True
     except Exception as e:
-        logger.error(f"Ошибка при проверке внешних ботов: {e}")
+        logger.error(f"Ошибка при сбросе сессии Telegram API: {e}")
         return False
 
 def main():
     """Основная функция для запуска и мониторинга бота в режиме фонового процесса."""
     logger.info("Запуск бота для Replit Deployment (Reserved VM Background Worker)")
     
-    # Проверяем, нет ли уже запущенного обработчика сессии Telegram API
-    check_external_bots_running()
+    # Проверяем, есть ли токен в переменных окружения
+    if not os.environ.get('TELEGRAM_TOKEN'):
+        logger.error("TELEGRAM_TOKEN не найден в переменных окружения! Бот не может быть запущен.")
+        sys.exit(1)
+    
+    # Сбрасываем сессию Telegram API, чтобы избежать конфликтов
+    reset_telegram_api_session()
     
     # Используем системные команды для более надежного завершения процессов
+    logger.info("Завершаем все запущенные процессы бота...")
     os.system("pkill -9 -f 'python.*main.py'")
     os.system("pkill -9 -f 'python.*bot_monitor.py'")
     os.system("pkill -9 -f 'python.*deploy_bot.py' -o")  # Убиваем только старые экземпляры (-o)
