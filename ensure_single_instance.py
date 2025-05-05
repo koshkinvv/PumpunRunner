@@ -24,18 +24,19 @@ def find_bot_processes():
     Возвращает список PID процессов.
     """
     bot_pids = []
-    keywords = ["main.py", "run_bot.py", "telegram", "bot_modified.py"]
+    keywords = ["main.py", "run_bot.py", "telegram", "bot_modified.py", "deploy_bot.py", "bot_monitor.py"]
     
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             # Ищем процессы Python
             if 'python' in proc.info['name'].lower():
-                cmdline = ' '.join(proc.info['cmdline'])
+                cmdline = ' '.join(proc.info['cmdline'] if proc.info['cmdline'] else [])
                 # Проверяем, относится ли процесс к боту
                 if any(keyword in cmdline for keyword in keywords):
                     # Исключаем текущий процесс
                     if proc.pid != os.getpid():
                         bot_pids.append(proc.pid)
+                        logging.info(f"Найден процесс бота: PID {proc.pid}, командная строка: {cmdline}")
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     
