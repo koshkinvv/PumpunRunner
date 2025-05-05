@@ -454,6 +454,19 @@ async def callback_query_handler(update, context):
     
     # Обработка кнопок подтверждения создания нового плана
     if query.data == "confirm_new_plan" or query.data == "new_plan":
+        # Получаем ID пользователя
+        telegram_id = update.effective_user.id
+        db_user_id = DBManager.get_user_id(telegram_id)
+        
+        # Проверяем статус активной подписки
+        active_subscription = DBManager.check_active_subscription(db_user_id)
+        
+        # Если в БД нет записи о подписке, но пользователь согласился на оплату 
+        # в текущей сессии, создаем запись в БД
+        if not active_subscription and context.user_data.get('payment_agreed', False):
+            DBManager.save_payment_status(db_user_id, True)
+            active_subscription = True
+        
         # Проверяем статус оплаты для создания плана
         if context.user_data.get('awaiting_payment_confirmation', False):
             await query.message.reply_text(
@@ -461,7 +474,7 @@ async def callback_query_handler(update, context):
             )
             return
             
-        if not context.user_data.get('payment_agreed', False):
+        if not active_subscription and not context.user_data.get('payment_agreed', False):
             # Это первый вызов для генерации плана после создания профиля
             # Проверяем, был ли отказ от оплаты
             if context.user_data.get('payment_agreed') == False:  # Именно False, а не None
