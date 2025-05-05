@@ -1,5 +1,6 @@
 import os
 import json
+import traceback
 from openai import OpenAI
 from config import logging
 
