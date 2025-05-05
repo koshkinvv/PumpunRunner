@@ -861,16 +861,25 @@ def setup_webhook(replit_domain=None):
         # Вызываем API Telegram для установки webhook
         import requests
         
-        # Отключаем предыдущий вебхук (на всякий случай)
+        # Отключаем предыдущий вебхук и ждем завершения
         delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
-        requests.post(delete_url)
+        delete_response = requests.post(delete_url)
+        if delete_response.status_code == 200:
+            logger.info(f"Предыдущий webhook удален: {delete_response.json()}")
+        else:
+            logger.error(f"Ошибка при удалении webhook: {delete_response.text}")
         
-        # Устанавливаем новый вебхук
+        # Добавляем небольшую паузу между удалением и установкой
+        import time
+        time.sleep(1)
+        
+        # Устанавливаем новый вебхук с улучшенной устойчивостью
         set_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook"
         params = {
             "url": webhook_url,
             "max_connections": 40,
-            "drop_pending_updates": True
+            "drop_pending_updates": True,
+            "allowed_updates": ["message", "callback_query", "chat_member"]
         }
         
         response = requests.post(set_url, json=params)
