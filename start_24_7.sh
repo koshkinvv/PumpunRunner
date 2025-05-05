@@ -95,7 +95,11 @@ check_components() {
         echo "✅ Система восстановления (auto_recovery.py) запущена"
     fi
     
-    return $all_running
+    if $all_running; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Проверяем компоненты
