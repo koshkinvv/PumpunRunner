@@ -40,12 +40,12 @@ def update_health_check():
 def main():
     """Запускает Telegram бота в режиме webhook."""
     
-    # Убиваем все существующие процессы бота для предотвращения конфликтов
+    # Убиваем только конфликтующие процессы бота, сохраняя Flask-приложение
     try:
-        logging.info("Останавливаем существующие процессы бота...")
+        logging.info("Останавливаем конфликтующие процессы бота...")
+        # НЕ останавливаем main.py, так как это Flask-приложение, которое должно работать параллельно
         os.system("pkill -f 'python.*bot_modified.py'")
         os.system("pkill -f 'python.*run_telegram_bot.py'")
-        os.system("pkill -f 'python.*main.py'")
         time.sleep(2)  # Даем процессам время завершиться
     except Exception as e:
         logging.error(f"Ошибка при остановке процессов: {e}")
