@@ -202,6 +202,61 @@ async def generate_plan_command(update, context):
         if not db_user_id:
             await update.message.reply_text("❌ Произошла ошибка при регистрации пользователя.")
             return
+            
+        # Проверяем статус оплаты пользователя
+        payment_status = DBManager.get_payment_status(db_user_id)
+        if not payment_status or not payment_status.get('payment_agreed', False):
+            # Если пользователь ещё не выбрал вариант оплаты
+            if not context.user_data.get('awaiting_payment_confirmation', False) and context.user_data.get('payment_agreed') is None:
+                reply_markup = ReplyKeyboardMarkup(
+                    [
+                        ['Да, буду платить 500 рублей в месяц'],
+                        ['Нет. Я и так МАШИНА Ой БОЙ!']
+                    ],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                await update.message.reply_text(
+                    "Этот бот создан с любовью к моей невесте Пумпуни, а она очень хочет поехать " + 
+                    "на Лондонский Марафон 2026 года. По этому бот стоит 500 рублей в месяц с " + 
+                    "гарантией добавления новых фичей и легкой отменой!",
+                    reply_markup=reply_markup
+                )
+                
+                # Сохраняем состояние - ожидаем ответа на вопрос об оплате
+                context.user_data['awaiting_payment_confirmation'] = True
+                return
+            # Если пользователь отказался от оплаты
+            elif context.user_data.get('payment_agreed') == False:
+                await update.message.reply_text(
+                    "Очень жаль, но я скоро сделаю простую бесплатную версию и пришлю ее тебе"
+                )
+                return
+            # Если статуса оплаты нет в БД, но есть в пользовательских данных
+            elif context.user_data.get('payment_agreed', False):
+                # Сохраняем статус оплаты в БД
+                DBManager.save_payment_status(db_user_id, True)
+            else:
+                # Предлагаем оплату снова
+                reply_markup = ReplyKeyboardMarkup(
+                    [
+                        ['Да, буду платить 500 рублей в месяц'],
+                        ['Нет. Я и так МАШИНА Ой БОЙ!']
+                    ],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                await update.message.reply_text(
+                    "Для доступа к функции создания плана тренировок необходимо оформить подписку. " +
+                    "Бот стоит 500 рублей в месяц с гарантией добавления новых фичей и легкой отменой!",
+                    reply_markup=reply_markup
+                )
+                
+                # Сохраняем состояние - ожидаем ответа на вопрос об оплате
+                context.user_data['awaiting_payment_confirmation'] = True
+                return
         
         # Check if user has a runner profile
         profile = DBManager.get_runner_profile(db_user_id)
@@ -2204,6 +2259,34 @@ def setup_bot():
                 )
                 
         elif text == "🆕 Создать новый план":
+            # Проверяем статус оплаты пользователя
+            payment_status = DBManager.get_payment_status(db_user_id)
+            if not payment_status or not payment_status.get('payment_agreed', False):
+                # Если статуса оплаты нет в БД, но есть в пользовательских данных
+                if context.user_data.get('payment_agreed', False):
+                    # Сохраняем статус оплаты в БД
+                    DBManager.save_payment_status(db_user_id, True)
+                else:
+                    # Предлагаем оплату
+                    reply_markup = ReplyKeyboardMarkup(
+                        [
+                            ['Да, буду платить 500 рублей в месяц'],
+                            ['Нет. Я и так МАШИНА Ой БОЙ!']
+                        ],
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                    
+                    await update.message.reply_text(
+                        "Для доступа к функции создания плана тренировок необходимо оформить подписку. " +
+                        "Бот стоит 500 рублей в месяц с гарантией добавления новых фичей и легкой отменой!",
+                        reply_markup=reply_markup
+                    )
+                    
+                    # Сохраняем состояние - ожидаем ответа на вопрос об оплате
+                    context.user_data['awaiting_payment_confirmation'] = True
+                    return
+            
             # Получаем профиль пользователя
             profile = DBManager.get_runner_profile(db_user_id)
             
