@@ -1954,6 +1954,48 @@ def setup_bot():
         elif text == "✏️ Обновить мой профиль":
             # Запускаем update_profile_command напрямую
             await update_profile_command(update, context)
+            
+        elif text == "🏃‍♂️ Показать мой профиль":
+            # Показываем текущий профиль пользователя
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            
+            if not runner_profile:
+                await update.message.reply_text(
+                    "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /plan."
+                )
+                return
+            
+            # Форматируем информацию о профиле для отображения
+            weekly_volume = format_weekly_volume(runner_profile.get('weekly_volume', 0))
+            
+            profile_text = (
+                f"🏃‍♂️ *Ваш профиль бегуна:*\n\n"
+                f"📏 Дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+                f"📅 Дата соревнований: {runner_profile.get('competition_date', 'Не указано')}\n"
+                f"⚧ Пол: {runner_profile.get('gender', 'Не указано')}\n"
+                f"🎂 Возраст: {runner_profile.get('age', 'Не указано')} лет\n"
+                f"📏 Рост: {runner_profile.get('height', 'Не указано')} см\n"
+                f"⚖️ Вес: {runner_profile.get('weight', 'Не указано')} кг\n"
+                f"🏅 Опыт бега: {runner_profile.get('experience', 'Не указано')}\n"
+                f"🎯 Цель: {runner_profile.get('goal', 'Не указано')}\n"
+                f"⏱️ Целевое время: {runner_profile.get('target_time', 'Не указано')}\n"
+                f"💪 Уровень физической подготовки: {runner_profile.get('fitness_level', 'Не указано')}\n"
+                f"📊 Еженедельный объем бега: {weekly_volume}\n"
+                f"🗓️ Дата начала тренировок: {runner_profile.get('training_start_date', 'Не указано')}\n\n"
+                f"Ваш профиль был создан: {runner_profile.get('created_at', 'Не указано')}\n"
+                f"Последнее обновление: {runner_profile.get('updated_at', 'Не указано')}"
+            )
+            
+            # Предлагаем кнопку для обновления профиля
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Обновить мой профиль", callback_data="update_profile")]
+            ])
+            
+            await update.message.reply_text(
+                profile_text, 
+                parse_mode='Markdown',
+                reply_markup=keyboard
+            )
     
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
