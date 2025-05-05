@@ -67,15 +67,6 @@ args = "python main.py"
 task = "shell.exec"
 args = "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile - --timeout 120"
 
-[[workflows.workflow]]
-name = "Bot 24/7"
-author = 41797496
-mode = "parallel"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash run_24_7.sh"
-
 [[ports]]
 localPort = 5000
 externalPort = 80
