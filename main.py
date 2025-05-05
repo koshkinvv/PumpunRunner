@@ -201,15 +201,8 @@ def main():
         application = setup_bot()
         logging.info("Telegram бот успешно настроен и запускается...")
         
-        # Запускаем бота в режиме polling
-        application.run_polling(
-            drop_pending_updates=True,  # Игнорируем накопившиеся обновления
-            allowed_updates=None,       # Принимаем все типы обновлений
-            pool_timeout=30,
-            connect_timeout=30,
-            read_timeout=30,
-            write_timeout=30
-        )
+        # Запускаем бота в режиме polling с параметрами по умолчанию
+        application.run_polling(drop_pending_updates=True)  # Игнорируем накопившиеся обновления
         
     except Exception as e:
         logging.error(f"Ошибка при запуске бота: {e}")
