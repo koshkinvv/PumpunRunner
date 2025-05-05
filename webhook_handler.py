@@ -236,12 +236,15 @@ def handle_message(application, update_data):
                                 )
                                 
                             except Exception as e:
-                                connection.rollback()
+                                if connection:
+                                    connection.rollback()
                                 logger.error(f"Ошибка при обновлении возраста: {e}")
                                 send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
                             finally:
-                                cursor.close()
-                                connection.close()
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
                                 
                         except ValueError:
                             logger.error(f"Некорректный формат возраста: {text}")
@@ -250,9 +253,270 @@ def handle_message(application, update_data):
                                 "❌ Пожалуйста, укажите возраст числом (например, 30)."
                             )
                             return
+                            
+                    # Шаг 4: Профиль с возрастом, но без роста
+                    elif profile and profile.get('age') and not profile.get('height'):
+                        # Пользователь отвечает на вопрос о росте
+                        logger.info(f"Получен ответ о росте: {text}")
+                        
+                        # Обрабатываем ответ о росте
+                        try:
+                            # Проверяем что рост - это число
+                            height = int(text.strip())
+                            
+                            if height < 100 or height > 250:
+                                send_telegram_message(
+                                    chat_id, 
+                                    "❌ Пожалуйста, укажите реальный рост от 100 до 250 см."
+                                )
+                                return
+                                
+                            # Обновляем данные профиля
+                            connection = DBManager.get_connection()
+                            cursor = connection.cursor()
+                            
+                            try:
+                                cursor.execute(
+                                    "UPDATE runner_profiles SET height = %s WHERE user_id = %s",
+                                    (height, user_id)
+                                )
+                                connection.commit()
+                                
+                                # Отправляем сообщение об успешном обновлении
+                                send_telegram_message(
+                                    chat_id, 
+                                    f"✅ Рост успешно установлен: {height} см."
+                                )
+                                
+                                # Следующий вопрос - о весе бегуна
+                                send_telegram_message(
+                                    chat_id, 
+                                    "⚖️ Укажите ваш вес в килограммах (например, 70):"
+                                )
+                                
+                            except Exception as e:
+                                if connection:
+                                    connection.rollback()
+                                logger.error(f"Ошибка при обновлении роста: {e}")
+                                send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                            finally:
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
+                                
+                        except ValueError:
+                            logger.error(f"Некорректный формат роста: {text}")
+                            send_telegram_message(
+                                chat_id, 
+                                "❌ Пожалуйста, укажите рост числом в сантиметрах (например, 175)."
+                            )
+                            return
+                    
+                    # Шаг 5: Профиль с ростом, но без веса
+                    elif profile and profile.get('height') and not profile.get('weight'):
+                        # Пользователь отвечает на вопрос о весе
+                        logger.info(f"Получен ответ о весе: {text}")
+                        
+                        # Обрабатываем ответ о весе
+                        try:
+                            # Проверяем что вес - это число
+                            weight = float(text.strip())
+                            
+                            if weight < 30 or weight > 200:
+                                send_telegram_message(
+                                    chat_id, 
+                                    "❌ Пожалуйста, укажите реальный вес от 30 до 200 кг."
+                                )
+                                return
+                                
+                            # Обновляем данные профиля
+                            connection = DBManager.get_connection()
+                            cursor = connection.cursor()
+                            
+                            try:
+                                cursor.execute(
+                                    "UPDATE runner_profiles SET weight = %s WHERE user_id = %s",
+                                    (weight, user_id)
+                                )
+                                connection.commit()
+                                
+                                # Отправляем сообщение об успешном обновлении
+                                send_telegram_message(
+                                    chat_id, 
+                                    f"✅ Вес успешно установлен: {weight} кг."
+                                )
+                                
+                                # Следующий вопрос - об опыте бега
+                                keyboard = [
+                                    [{"text": "Менее 1 года", "callback_data": "set_experience_less_than_year"}],
+                                    [{"text": "1-3 года", "callback_data": "set_experience_1_3_years"}],
+                                    [{"text": "3-5 лет", "callback_data": "set_experience_3_5_years"}],
+                                    [{"text": "Более 5 лет", "callback_data": "set_experience_more_than_5_years"}]
+                                ]
+                                
+                                send_message_with_keyboard(
+                                    chat_id,
+                                    "⏱️ Какой у вас опыт бега?",
+                                    keyboard
+                                )
+                                
+                            except Exception as e:
+                                if connection:
+                                    connection.rollback()
+                                logger.error(f"Ошибка при обновлении веса: {e}")
+                                send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                            finally:
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
+                                
+                        except ValueError:
+                            logger.error(f"Некорректный формат веса: {text}")
+                            send_telegram_message(
+                                chat_id, 
+                                "❌ Пожалуйста, укажите вес числом в килограммах (например, 70)."
+                            )
+                            return
+                    
+                    # Шаг 6: Профиль с установленной целью, но без целевого времени
+                    elif profile and profile.get('goal') and not profile.get('target_time'):
+                        # Пользователь отвечает на вопрос о целевом времени
+                        logger.info(f"Получен ответ о целевом времени: {text}")
+                        
+                        # Обрабатываем ответ о целевом времени
+                        try:
+                            # Проверяем формат времени Ч:ММ:СС
+                            target_time = text.strip()
+                            parts = target_time.split(':')
+                            
+                            if len(parts) != 3:
+                                send_telegram_message(
+                                    chat_id, 
+                                    "❌ Пожалуйста, укажите время в формате Ч:ММ:СС (например, 4:30:00)."
+                                )
+                                return
+                                
+                            hours, minutes, seconds = map(int, parts)
+                            
+                            if hours < 0 or minutes < 0 or seconds < 0 or minutes > 59 or seconds > 59:
+                                send_telegram_message(
+                                    chat_id, 
+                                    "❌ Неверный формат времени. Минуты и секунды должны быть от 0 до 59."
+                                )
+                                return
+                                
+                            # Обновляем данные профиля
+                            connection = DBManager.get_connection()
+                            cursor = connection.cursor()
+                            
+                            try:
+                                cursor.execute(
+                                    "UPDATE runner_profiles SET target_time = %s WHERE user_id = %s",
+                                    (target_time, user_id)
+                                )
+                                connection.commit()
+                                
+                                # Отправляем сообщение об успешном обновлении
+                                send_telegram_message(
+                                    chat_id, 
+                                    f"✅ Целевое время успешно установлено: {target_time}."
+                                )
+                                
+                                # Следующий вопрос - об уровне подготовки
+                                keyboard = [
+                                    [{"text": "Начинающий", "callback_data": "set_fitness_beginner"}],
+                                    [{"text": "Средний", "callback_data": "set_fitness_intermediate"}],
+                                    [{"text": "Продвинутый", "callback_data": "set_fitness_advanced"}]
+                                ]
+                                
+                                send_message_with_keyboard(
+                                    chat_id,
+                                    "💪 Какой у вас текущий уровень физической подготовки?",
+                                    keyboard
+                                )
+                                
+                            except Exception as e:
+                                if connection:
+                                    connection.rollback()
+                                logger.error(f"Ошибка при обновлении целевого времени: {e}")
+                                send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                            finally:
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
+                                
+                        except ValueError:
+                            logger.error(f"Некорректный формат целевого времени: {text}")
+                            send_telegram_message(
+                                chat_id, 
+                                "❌ Пожалуйста, укажите время в формате Ч:ММ:СС (например, 4:30:00)."
+                            )
+                            return
+                    
+                    # Шаг 7: Профиль с уровнем подготовки, но без недельного объема
+                    elif profile and profile.get('fitness') and not profile.get('weekly_volume'):
+                        # Пользователь отвечает на вопрос о недельном объеме бега
+                        logger.info(f"Получен ответ о недельном объеме бега: {text}")
+                        
+                        # Обрабатываем ответ о недельном объеме
+                        try:
+                            # Проверяем что объем - это число
+                            weekly_volume = float(text.strip())
+                            
+                            if weekly_volume < 0 or weekly_volume > 300:
+                                send_telegram_message(
+                                    chat_id, 
+                                    "❌ Пожалуйста, укажите реальный недельный объем бега от 0 до 300 км."
+                                )
+                                return
+                                
+                            # Обновляем данные профиля
+                            connection = DBManager.get_connection()
+                            cursor = connection.cursor()
+                            
+                            try:
+                                cursor.execute(
+                                    "UPDATE runner_profiles SET weekly_volume = %s WHERE user_id = %s",
+                                    (weekly_volume, user_id)
+                                )
+                                connection.commit()
+                                
+                                # Отправляем сообщение об успешном обновлении
+                                send_telegram_message(
+                                    chat_id, 
+                                    f"✅ Недельный объем бега успешно установлен: {weekly_volume} км."
+                                )
+                                
+                                # Вопрос о дате начала тренировок
+                                send_telegram_message(
+                                    chat_id, 
+                                    "📅 Укажите желаемую дату начала тренировок (в формате ДД.ММ.ГГГГ).\n\n"
+                                    "Если хотите начать сегодня, напишите 'Сегодня'."
+                                )
+                                
+                            except Exception as e:
+                                if connection:
+                                    connection.rollback()
+                                logger.error(f"Ошибка при обновлении недельного объема: {e}")
+                                send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                            finally:
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
+                                
+                        except ValueError:
+                            logger.error(f"Некорректный формат недельного объема: {text}")
+                            send_telegram_message(
+                                chat_id, 
+                                "❌ Пожалуйста, укажите недельный объем числом в километрах (например, 30)."
+                            )
+                            return
                     
                     # Если профиль находится на другом этапе или не обрабатывается через интерактивный диалог
-                    else:
                     else:
                         # Обычное текстовое сообщение (не часть создания профиля)
                         send_telegram_message(chat_id, "Я получил ваше сообщение и обрабатываю его.")
@@ -444,7 +708,141 @@ def handle_callback_query(application, update_data):
         answer_callback_query(callback_id)
         
         # Обрабатываем различные callback_data
-        if callback_data.startswith('set_gender_'):
+        if callback_data.startswith('set_experience_'):
+            # Обработка установки опыта бега
+            try:
+                # Получаем значение опыта из callback_data
+                experience_code = callback_data.split('_')[-1]  # 'less_than_year', '1_3_years', '3_5_years', 'more_than_5_years'
+                
+                # Преобразуем код опыта в текст для сохранения
+                experience_map = {
+                    "less_than_year": "Менее 1 года", 
+                    "1_3_years": "1-3 года", 
+                    "3_5_years": "3-5 лет", 
+                    "more_than_5_years": "Более 5 лет"
+                }
+                experience_text = experience_map.get(experience_code, "Не указан")
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Обновляем опыт в профиле
+                connection = DBManager.get_connection()
+                cursor = connection.cursor()
+                
+                try:
+                    cursor.execute(
+                        "UPDATE runner_profiles SET experience = %s WHERE user_id = %s",
+                        (experience_text, db_user_id)
+                    )
+                    connection.commit()
+                    
+                    # Отправляем сообщение об успешном обновлении
+                    send_telegram_message(
+                        chat_id, 
+                        f"✅ Опыт бега успешно установлен: {experience_text}."
+                    )
+                    
+                    # Следующий вопрос - о цели тренировок
+                    keyboard = [
+                        [{"text": "Завершить первый марафон", "callback_data": "set_goal_finish_first_marathon"}],
+                        [{"text": "Улучшить время", "callback_data": "set_goal_improve_time"}],
+                        [{"text": "Поддержание формы", "callback_data": "set_goal_maintain_fitness"}],
+                        [{"text": "Сбросить вес", "callback_data": "set_goal_lose_weight"}]
+                    ]
+                    
+                    send_message_with_keyboard(
+                        chat_id,
+                        "🎯 Какая ваша главная цель тренировок?",
+                        keyboard
+                    )
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    logger.error(f"Ошибка при обновлении опыта бега: {e}")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                finally:
+                    if cursor:
+                        cursor.close()
+                    if connection:
+                        connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Ошибка при обработке установки опыта бега: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при установке опыта бега. Пожалуйста, попробуйте позже.")
+                
+        elif callback_data.startswith('set_goal_'):
+            # Обработка установки цели тренировок
+            try:
+                # Получаем значение цели из callback_data
+                goal_code = callback_data.split('_')[-1]  # 'finish_first_marathon', 'improve_time', 'maintain_fitness', 'lose_weight'
+                
+                # Преобразуем код цели в текст для сохранения
+                goal_map = {
+                    "finish_first_marathon": "Завершить первый марафон", 
+                    "improve_time": "Улучшить время", 
+                    "maintain_fitness": "Поддержание формы", 
+                    "lose_weight": "Сбросить вес"
+                }
+                goal_text = goal_map.get(goal_code, "Не указана")
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Обновляем цель в профиле
+                connection = DBManager.get_connection()
+                cursor = connection.cursor()
+                
+                try:
+                    cursor.execute(
+                        "UPDATE runner_profiles SET goal = %s WHERE user_id = %s",
+                        (goal_text, db_user_id)
+                    )
+                    connection.commit()
+                    
+                    # Отправляем сообщение об успешном обновлении
+                    send_telegram_message(
+                        chat_id, 
+                        f"✅ Цель тренировок успешно установлена: {goal_text}."
+                    )
+                    
+                    # Спрашиваем о целевом времени завершения дистанции
+                    send_telegram_message(
+                        chat_id, 
+                        "⏱️ Укажите ваше целевое время для выбранной дистанции (в формате Ч:ММ:СС, например 4:30:00):"
+                    )
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    logger.error(f"Ошибка при обновлении цели тренировок: {e}")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                finally:
+                    if cursor:
+                        cursor.close()
+                    if connection:
+                        connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Ошибка при обработке установки цели тренировок: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при установке цели тренировок. Пожалуйста, попробуйте позже.")
+                
+        elif callback_data.startswith('set_gender_'):
             # Обработка установки пола
             try:
                 # Получаем значение пола из callback_data
