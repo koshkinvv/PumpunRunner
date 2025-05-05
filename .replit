@@ -6,7 +6,7 @@ packages = ["openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "python start_bot_with_monitor.py"]
+run = ["sh", "-c", "python deploy_bot.py"]
 ignorePorts = true
 
 [workflows]
