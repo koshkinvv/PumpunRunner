@@ -6,7 +6,7 @@ packages = ["jq", "openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "bash start_24_7.sh"]
+run = ["sh", "-c", "bash run_24_7.sh"]
 
 [workflows]
 runButton = "Bot 24/7"
@@ -74,7 +74,7 @@ mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash start_24_7.sh"
+args = "bash run_24_7.sh"
 
 [[ports]]
 localPort = 5000
