@@ -556,5 +556,74 @@ def main():
         release_lock(lock_file_handle)
 
 if __name__ == '__main__':
-    # Обычный запуск основной функции
-    main()
+    # Проверяем наличие аргументов командной строки
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--webhook":
+        # Запускаем бота в режиме webhook
+        import subprocess
+        import time
+        import os
+        
+        logging.info("Запуск в режиме webhook...")
+        
+        # Останавливаем все существующие процессы бота для предотвращения конфликтов
+        try:
+            logging.info("Останавливаем существующие процессы бота...")
+            os.system("pkill -f 'python.*bot_modified.py'")
+            os.system("pkill -f 'python.*run_telegram_bot.py'")
+            time.sleep(2)  # Даем процессам время завершиться
+        except Exception as e:
+            logging.error(f"Ошибка при остановке процессов: {e}")
+        
+        # Импортируем необходимые модули
+        from config import TELEGRAM_TOKEN
+        from webhook_handler import setup_webhook
+        
+        # Получаем домен Replit
+        replit_domain = os.environ.get('REPLIT_DOMAINS', '').split(',')[0]
+        if not replit_domain:
+            # Fallback к старому формату
+            replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+        logging.info(f"Использую домен для webhook: {replit_domain}")
+        
+        # Настраиваем webhook
+        setup_result = setup_webhook(replit_domain)
+        if setup_result:
+            logging.info("Webhook успешно настроен")
+        else:
+            logging.error("Не удалось настроить webhook")
+            sys.exit(1)
+        
+        # Основной цикл обновления файла здоровья и мониторинга webhook
+        logging.info("Бот запущен в режиме webhook. Мониторим состояние...")
+        
+        while True:
+            # Обновляем файл здоровья
+            try:
+                import datetime
+                now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                with open("bot_health.txt", "w") as f:
+                    f.write(now)
+                logging.info(f"Файл здоровья обновлен: {now}")
+            except Exception as e:
+                logging.error(f"Ошибка при обновлении файла здоровья: {e}")
+            
+            # Проверяем, что webhook по-прежнему настроен
+            try:
+                import requests
+                check_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+                response = requests.get(check_url)
+                if response.status_code == 200:
+                    webhook_info = response.json()
+                    if not webhook_info.get("result", {}).get("url"):
+                        logging.error("Webhook не настроен! Переустанавливаем...")
+                        setup_webhook(replit_domain)
+            except Exception as e:
+                logging.error(f"Ошибка при проверке состояния webhook: {e}")
+            
+            # Ждем 60 секунд перед следующей проверкой
+            time.sleep(60)
+    else:
+        # Обычный запуск основной функции
+        main()
