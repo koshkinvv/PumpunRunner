@@ -74,7 +74,10 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
         
         # Получаем домен Replit
-        replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+        replit_domain = os.environ.get('REPLIT_DOMAINS', '').split(',')[0]
+        if not replit_domain:
+            # Fallback к старому формату
+            replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
         logging.info(f"Использую домен для webhook: {replit_domain}")
         
         # Настраиваем webhook

@@ -814,28 +814,33 @@ def setup_webhook(replit_domain=None):
     """
     try:
         if not replit_domain:
-            # Используем домен сервера напрямую
-            import socket
+            # Используем домен Replit из переменных окружения
+            import os
             try:
-                # Получаем hostname текущего сервера
-                hostname = socket.gethostname()
-                # Получаем IP адрес
-                ip = socket.gethostbyname(hostname)
-                logger.info(f"Обнаружен hostname: {hostname}, IP: {ip}")
-                # Используем текущий хост
-                import os
-                if "REPL_SLUG" in os.environ and "REPL_OWNER" in os.environ:
+                # Предпочтительно используем REPLIT_DOMAINS (новый формат)
+                if "REPLIT_DOMAINS" in os.environ:
+                    replit_domain = os.environ.get('REPLIT_DOMAINS', '').split(',')[0]
+                    logger.info(f"Использую домен REPLIT_DOMAINS: {replit_domain}")
+                # Альтернативно используем REPLIT_DEV_DOMAIN
+                elif "REPLIT_DEV_DOMAIN" in os.environ:
+                    replit_domain = os.environ.get('REPLIT_DEV_DOMAIN')
+                    logger.info(f"Использую домен REPLIT_DEV_DOMAIN: {replit_domain}")
+                # Старый формат REPL_SLUG.REPL_OWNER.repl.co
+                elif "REPL_SLUG" in os.environ and "REPL_OWNER" in os.environ:
                     replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
+                    logger.info(f"Использую домен REPL_SLUG.REPL_OWNER: {replit_domain}")
+                # Fallback
                 else:
-                    replit_domain = "workspace.replit.app"
+                    # Получаем hostname текущего сервера
+                    import socket
+                    hostname = socket.gethostname()
+                    logger.info(f"Использую fallback hostname: {hostname}")
+                    replit_domain = hostname
             except Exception as e:
-                logger.error(f"Ошибка при определении hostname: {e}")
-                # Fallback домен
-                import os
-                if "REPL_SLUG" in os.environ and "REPL_OWNER" in os.environ:
-                    replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
-                else:
-                    replit_domain = "workspace.replit.app"
+                logger.error(f"Ошибка при определении домена Replit: {e}")
+                # Последний fallback домен
+                replit_domain = "workspace.replit.app"
+                logger.warning(f"Использую последний fallback домен: {replit_domain}")
             
         # Формируем webhook URL
         if replit_domain:
