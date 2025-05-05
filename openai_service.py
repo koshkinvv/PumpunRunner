@@ -135,6 +135,8 @@ class OpenAIService:
             f"- Рост: {profile.get('height', 'Неизвестно')} см\n"
             f"- Вес: {profile.get('weight', 'Неизвестно')} кг\n"
             f"- Цель: {profile.get('goal', 'Неизвестно')}\n"
+            f"- Предпочитаемое количество тренировок в неделю: {profile.get('training_days_per_week', '3')}\n"
+            f"- Предпочитаемые дни тренировок: {profile.get('preferred_training_days', 'Не указано')}\n"
         )
         
         if profile.get('goal') == 'Улучшить время':
@@ -264,6 +266,7 @@ class OpenAIService:
             
             # Проверяем, как быстро пользователь выполнил предыдущий план
             from datetime import datetime, timedelta
+            import logging
             
             # Пытаемся получить информацию о сроках выполнения предыдущего плана
             rapid_completion = False
@@ -320,6 +323,8 @@ class OpenAIService:
 - Рост: {runner_profile.get('height', 'Неизвестно')} см
 - Вес: {runner_profile.get('weight', 'Неизвестно')} кг
 - Цель: {runner_profile.get('goal', 'Неизвестно')}
+- Предпочитаемое количество тренировок в неделю: {runner_profile.get('training_days_per_week', '3')}
+- Предпочитаемые дни тренировок: {runner_profile.get('preferred_training_days', 'Не указано')}
 """
             
             # Добавляем целевое время, если цель - улучшить время
