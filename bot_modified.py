@@ -487,13 +487,30 @@ async def callback_query_handler(update, context):
             # Отправляем каждый день тренировки с соответствующими кнопками
             # Проверяем структуру данных плана и выбираем правильное поле
             training_days = []
-            if 'training_days' in plan:
-                training_days = plan['training_days']
-            elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
-                training_days = plan['plan_data']['training_days']
             
-            logging.info(f"План для пользователя: {db_user_id}, структура: {plan.keys()}")
-            logging.info(f"Найдено дней тренировок: {len(training_days)}")
+            # Подробное логирование для отладки
+            logging.info(f"План для пользователя: {db_user_id}, ID плана: {plan.get('id', 'Нет ID')}")
+            logging.info(f"Ключи в плане: {list(plan.keys())}")
+            
+            if 'training_days' in plan:
+                logging.info("Найдены дни тренировок в корне плана")
+                training_days = plan['training_days']
+            elif 'plan_data' in plan:
+                logging.info(f"Найдено поле plan_data, тип: {type(plan['plan_data'])}")
+                if isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                    logging.info("Найдены дни тренировок в plan_data")
+                    training_days = plan['plan_data']['training_days']
+                elif isinstance(plan['plan_data'], str):
+                    # Если plan_data - это строка JSON, пробуем распарсить
+                    try:
+                        plan_data_json = json.loads(plan['plan_data'])
+                        if 'training_days' in plan_data_json:
+                            logging.info("Найдены дни тренировок после парсинга JSON")
+                            training_days = plan_data_json['training_days']
+                    except:
+                        logging.error("Не удалось распарсить plan_data как JSON")
+            
+            logging.info(f"Найдено дней тренировок: {len(training_days) if training_days else 0}")
             
             for idx, day in enumerate(training_days):
                 training_day_num = idx + 1
