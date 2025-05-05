@@ -258,7 +258,69 @@ def handle_callback_query(application, update_data):
         answer_callback_query(callback_id)
         
         # Обрабатываем различные callback_data
-        if callback_data.startswith('complete_training_') or callback_data.startswith('cancel_training_'):
+        if callback_data.startswith('set_distance_'):
+            # Обработка установки дистанции
+            try:
+                # Получаем значение дистанции из callback_data
+                distance = int(callback_data.split('_')[-1])
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Получаем текущий профиль
+                profile = DBManager.get_runner_profile(db_user_id)
+                
+                if not profile:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль бегуна. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Обновляем дистанцию в профиле
+                connection = DBManager.get_connection()
+                cursor = connection.cursor()
+                
+                try:
+                    cursor.execute(
+                        "UPDATE runner_profiles SET distance = %s WHERE user_id = %s",
+                        (distance, db_user_id)
+                    )
+                    connection.commit()
+                    
+                    # Отправляем сообщение об успешном обновлении
+                    send_telegram_message(
+                        chat_id, 
+                        f"✅ Дистанция успешно установлена: {distance} км.\n\n"
+                        "Теперь можем создать план тренировок."
+                    )
+                    
+                    # Запускаем создание нового плана
+                    fake_callback_query = {
+                        'id': str(uuid.uuid4()),
+                        'from': {'id': chat_id, 'first_name': 'User'},
+                        'message': {'chat': {'id': chat_id}, 'message_id': 0},
+                        'data': 'new_plan'
+                    }
+                    handle_callback_query(application, {'callback_query': fake_callback_query})
+                    
+                except Exception as e:
+                    connection.rollback()
+                    logger.error(f"Ошибка при обновлении дистанции: {e}")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении дистанции.")
+                finally:
+                    cursor.close()
+                    connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Ошибка при обработке установки дистанции: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при установке дистанции. Пожалуйста, попробуйте позже.")
+                
+        elif callback_data.startswith('complete_training_') or callback_data.startswith('cancel_training_'):
             # Обработка действий с тренировками
             try:
                 parts = callback_data.split('_')
