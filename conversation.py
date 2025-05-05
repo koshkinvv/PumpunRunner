@@ -888,6 +888,8 @@ class RunnerProfileConversation:
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
+                STATES['TRAINING_DAYS_PER_WEEK']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_days_per_week)],
+                STATES['PREFERRED_TRAINING_DAYS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_preferred_training_days)],
                 STATES['CONFIRMATION']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_data)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)],
