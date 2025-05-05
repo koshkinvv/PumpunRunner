@@ -1013,6 +1013,9 @@ async def callback_query_handler(update, context):
                     
                     await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
                 
+
+                # Отправляем приглашение в чат БЕТА тестеров
+                await query.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
                 # Показываем главное меню после генерации плана
                 await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
             finally:
@@ -1137,8 +1140,11 @@ async def callback_query_handler(update, context):
                         [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
                         [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
                     ])
-                    
-                    await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+
+                # Отправляем приглашение в чат БЕТА тестеров
+                await query.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
+                
+                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
                 
                 # Показываем главное меню после генерации плана
                 await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
@@ -2371,6 +2377,9 @@ def setup_bot():
                     f"{saved_plan['plan_description']}",
                     parse_mode='Markdown'
                 )
+                
+                # Отправляем приглашение в чат БЕТА тестеров
+                await update.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
                 
                 # Показываем главное меню после генерации плана
                 await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
