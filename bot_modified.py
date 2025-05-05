@@ -457,12 +457,48 @@ async def callback_query_handler(update, context):
     
     elif query.data == "update_profile_first":
         # Пользователь решил сначала обновить профиль
-        # Просто отправляем сообщение с соответствующей кнопкой из главного меню
-        await query.message.reply_text("✏️ Обновить мой профиль")
+        # Отправляем сообщение и запускаем обновление профиля напрямую
+        # используя конверсейшн-хэндлер из профиля
+        from conversation import RunnerProfileConversation
+        profile_conv = RunnerProfileConversation()
         
-        # Показываем главное меню
-        await send_main_menu(update, context, "Выберите действие после обновления профиля")
-        return
+        # Сообщаем пользователю, что начинаем обновление профиля
+        await query.message.reply_text(
+            "✏️ Начинаем обновление профиля бегуна.\n\n"
+            "Я буду задавать вопросы о ваших параметрах. "
+            "Вы можете отменить процесс в любой момент, отправив команду /cancel."
+        )
+        
+        # Получаем профиль пользователя
+        runner_profile = DBManager.get_runner_profile(db_user_id)
+        
+        # Формируем клавиатуру для выбора дистанции
+        from telegram import ReplyKeyboardMarkup
+        reply_markup = ReplyKeyboardMarkup(
+            [['5', '10'], ['21', '42']], 
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        # Отправляем начальное сообщение с запросом дистанции
+        msg = await query.message.reply_text(
+            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+            f"Введите новую целевую дистанцию (в км):",
+            reply_markup=reply_markup
+        )
+        
+        # Настраиваем данные контекста для обработки диалога
+        context.user_data['db_user_id'] = db_user_id
+        context.user_data['profile_data'] = {}
+        context.user_data['is_profile_update'] = True
+        
+        # Устанавливаем текущее состояние диалога
+        from conversation import STATES
+        # Добавляем обработчик в диспетчер
+        update._effective_user = update.effective_user
+        update._effective_message = msg
+        
+        return STATES['DISTANCE']
     
     elif query.data == "cancel_new_plan":
         # Пользователь отменил создание нового плана

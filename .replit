@@ -6,7 +6,7 @@ packages = ["openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app"]
+run = ["sh", "-c", "python run_bot.py & gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"]
 
 [workflows]
 runButton = "Web and Bot"
