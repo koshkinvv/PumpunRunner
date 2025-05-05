@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import TELEGRAM_TOKEN, logging
+from config import TELEGRAM_TOKEN, logging, STATES
 from models import create_tables
 from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
@@ -1873,10 +1873,41 @@ def setup_bot():
                 
         elif text == "✏️ Обновить мой профиль":
             # Начинаем диалог обновления профиля
-            await update.message.reply_text(
-                "Для обновления профиля используйте команду /start. "
-                "Обратите внимание, что это перезапишет ваши текущие данные."
-            )
+            # Создаем новый объект RunnerProfileConversation
+            from conversation import RunnerProfileConversation
+            conversation = RunnerProfileConversation()
+            
+            # Получаем текущий профиль бегуна
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            if runner_profile:
+                # Запускаем процесс обновления профиля
+                # Сохраняем db_user_id в контексте диалога
+                if not hasattr(context, 'user_data'):
+                    context.user_data = {}
+                context.user_data['db_user_id'] = db_user_id
+                context.user_data['updating_profile'] = True
+                
+                # Запускаем процесс обновления с команды /update
+                from telegram import ReplyKeyboardMarkup
+                
+                await update.message.reply_text(
+                    f"Хорошо, давайте обновим ваш профиль бегуна. "
+                    f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+                    f"Начнем с целевой дистанции. Текущее значение: {runner_profile.get('distance', 'Не указано')} км.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        [['5', '10'], ['21', '42']], 
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                )
+                
+                # Переход к состоянию ввода дистанции
+                return STATES['DISTANCE']
+            else:
+                # Если профиль не найден, предложим создать новый
+                await update.message.reply_text(
+                    "У вас еще нет профиля бегуна. Давайте создадим его с помощью команды /start."
+                )
     
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
