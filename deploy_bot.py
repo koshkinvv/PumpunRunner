@@ -148,16 +148,38 @@ def monitor_bot_processes(bot_process, monitor_process):
         # Ждем 30 секунд перед следующей проверкой
         time.sleep(30)
 
+def check_external_bots_running():
+    """Проверяет, есть ли внешние боты, которые могут конфликтовать с нашим."""
+    try:
+        # Проверяем статус вебхука
+        webhook_info = os.popen(f"curl -s https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/getWebhookInfo").read()
+        logger.info(f"Webhook info: {webhook_info}")
+        
+        # Пытаемся удалить вебхук
+        delete_result = os.popen(f"curl -s https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/deleteWebhook").read()
+        logger.info(f"Delete webhook result: {delete_result}")
+        
+        # Для дополнительной очистки, отправляем запрос с новым offset, чтобы сбросить сессию getUpdates
+        reset_result = os.popen(f"curl -s 'https://api.telegram.org/bot{os.environ.get('TELEGRAM_TOKEN')}/getUpdates?offset=-1'").read()
+        logger.info(f"Reset getUpdates result: {reset_result}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при проверке внешних ботов: {e}")
+        return False
+
 def main():
     """Основная функция для запуска и мониторинга бота в режиме фонового процесса."""
     logger.info("Запуск бота для Replit Deployment (Reserved VM Background Worker)")
     
-    # Дополнительно проверяем и завершаем другие экземпляры этого скрипта
-    try:
-        os.system("pkill -f 'python.*deploy_bot.py' -o")  # Убиваем только старые экземпляры (-o)
-        time.sleep(2)
-    except:
-        pass
+    # Проверяем, нет ли уже запущенного обработчика сессии Telegram API
+    check_external_bots_running()
+    
+    # Используем системные команды для более надежного завершения процессов
+    os.system("pkill -9 -f 'python.*main.py'")
+    os.system("pkill -9 -f 'python.*bot_monitor.py'")
+    os.system("pkill -9 -f 'python.*deploy_bot.py' -o")  # Убиваем только старые экземпляры (-o)
+    time.sleep(2)
     
     # Удаляем лок-файлы, если они остались от предыдущих запусков
     for lock_file in ['./uv.lock', './bot.lock', './telegram.lock', './instance.lock', './bot_lock.pid']:
@@ -177,8 +199,10 @@ def main():
     except Exception as e:
         logger.error(f"Не удалось записать PID в файл: {e}")
     
-    # Ждем 10 секунд перед запуском для того, чтобы убедиться, что все старые процессы завершены
-    time.sleep(10)
+    # Ждем 15 секунд перед запуском для того, чтобы убедиться, что все старые процессы завершены
+    # и чтобы Telegram API успел сбросить предыдущую сессию
+    logger.info("Ожидание 15 секунд перед запуском...")
+    time.sleep(15)
     
     # Запускаем бота и монитор
     result = start_bot_and_monitor()
