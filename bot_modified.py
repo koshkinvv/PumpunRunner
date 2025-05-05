@@ -306,12 +306,40 @@ async def update_profile_command(update, context):
     
     # Инициализируем обновление профиля
     if hasattr(update, 'callback_query'):
-        # Если метод вызван из callback_query_handler, используем объект callback_query.message
-        # как исходное сообщение для обновления
-        new_update = update
-        # Добавляем свойство message, чтобы оно указывало на message из callback_query
-        new_update.message = update.callback_query.message
-        # Запускаем диалог обновления профиля
+        # Если метод вызван из callback_query_handler, сначала отправляем сообщение
+        # через callback_query.message, и используем его как основу для диалога
+        # Сначала отправляем сообщение через callback_query.message
+        await update.callback_query.message.reply_text(
+            "✏️ Давайте обновим ваш профиль бегуна. "
+            "Я буду задавать вопросы, а вы отвечайте на них.\n\n"
+            "Вы можете отменить процесс в любой момент, отправив команду /cancel."
+        )
+        
+        # Создаем новый Update объект, который имитирует сообщение
+        # Это необходимо, так как start_update ожидает update.message
+        from telegram import Update as TelegramUpdate
+        from telegram import Message, Chat, User
+        
+        # Получаем оригинальное сообщение из callback_query
+        orig_message = update.callback_query.message
+        
+        # Создаем новый объект Message
+        new_message = Message(
+            message_id=orig_message.message_id,
+            date=orig_message.date,
+            chat=orig_message.chat,
+            from_user=update.effective_user,  # Используем пользователя из оригинального update
+            text="/update",  # Имитируем команду /update
+            bot=orig_message.bot
+        )
+        
+        # Создаем новый объект Update
+        new_update = TelegramUpdate(
+            update_id=update.update_id,
+            message=new_message
+        )
+        
+        # Запускаем диалог обновления профиля с новым объектом Update
         await profile_conv.start_update(new_update, context)
     else:
         # Если метод вызван из команды
