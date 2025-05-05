@@ -1,47 +1,55 @@
-modules = ["python-3.11", "postgresql-16"]
+run = "python start_bot_directly.py"
+hidden = ["venv", ".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
+modules = ["postgresql-16"]
+
+# Определение рабочих процессов (workflows)
+[interpreter]
+command = ["python3", "-u", "main.py"]
+
+[languages.python3.languageServer]
+start = ["pylsp"]
 
 [nix]
-channel = "stable-24_05"
-packages = ["openssl", "postgresql"]
+channel = "stable-23_11"
+
+[languages]
+
+[languages.python3]
+pattern = "**/*.py"
+
+[env]
+PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
+PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-deploymentTarget = "gce"
-run = ["sh", "-c", "python deploy_bot.py"]
-ignorePorts = true
+run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"]
+deploymentTarget = "cloudrun"
+
+[webview]
+path = "/"
+port = 5000
+
+# Настройка отдельного процесса для бота
+[[ports]]
+localPort = 5000
+externalPort = 80
 
 [workflows]
-runButton = "Web and Bot"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "bot_runner"
 
 [[workflows.workflow]]
 name = "Start application"
-author = "agent"
+mode = "sequential"
+author = 41797496
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
-waitForPort = 5000
 
 [[workflows.workflow]]
 name = "bot_runner"
-author = "agent"
+mode = "sequential"
+author = 41797496
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py"
-
-[[ports]]
-localPort = 5000
-externalPort = 80
+args = "python start_bot_directly.py"
