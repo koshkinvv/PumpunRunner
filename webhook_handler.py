@@ -516,6 +516,99 @@ def handle_message(application, update_data):
                             )
                             return
                     
+                    # Шаг 8: Профиль с недельным объемом, но без даты начала тренировок
+                    elif profile and profile.get('weekly_volume') and not profile.get('training_start_date'):
+                        # Пользователь отвечает на вопрос о дате начала тренировок
+                        logger.info(f"Получен ответ о дате начала тренировок: {text}")
+                        
+                        # Обрабатываем ответ о дате начала тренировок
+                        try:
+                            # Если пользователь хочет начать сегодня
+                            if text.strip().lower() == 'сегодня':
+                                from datetime import date
+                                training_start_date = date.today().strftime('%d.%m.%Y')
+                            else:
+                                # Проверяем формат даты ДД.ММ.ГГГГ
+                                training_start_date = text.strip()
+                                import re
+                                if not re.match(r'^\d{2}\.\d{2}\.\d{4}$', training_start_date):
+                                    send_telegram_message(
+                                        chat_id, 
+                                        "❌ Пожалуйста, укажите дату в формате ДД.ММ.ГГГГ (например, 01.06.2025)"
+                                    )
+                                    return
+                                    
+                                # Проверяем валидность даты
+                                day, month, year = map(int, training_start_date.split('.'))
+                                from datetime import datetime
+                                try:
+                                    datetime(year, month, day)
+                                except ValueError:
+                                    send_telegram_message(
+                                        chat_id, 
+                                        "❌ Пожалуйста, укажите действительную дату (например, 01.06.2025)."
+                                    )
+                                    return
+                                
+                            # Обновляем данные профиля
+                            connection = DBManager.get_connection()
+                            cursor = connection.cursor()
+                            
+                            try:
+                                cursor.execute(
+                                    "UPDATE runner_profiles SET training_start_date = %s WHERE user_id = %s",
+                                    (training_start_date, user_id)
+                                )
+                                connection.commit()
+                                
+                                # Отправляем сообщение об успешном обновлении
+                                send_telegram_message(
+                                    chat_id, 
+                                    f"✅ Дата начала тренировок успешно установлена: {training_start_date}."
+                                )
+                                
+                                # Последний вопрос - о часовом поясе
+                                # Создаем клавиатуру с часовыми поясами
+                                keyboard = []
+                                for offset in range(-12, 15, 3):
+                                    row = []
+                                    for i in range(3):
+                                        if offset + i <= 14:  # макс. UTC+14
+                                            tz_offset = offset + i
+                                            sign = "+" if tz_offset >= 0 else ""
+                                            button = {
+                                                "text": f"UTC{sign}{tz_offset}",
+                                                "callback_data": f"set_timezone_{tz_offset}"
+                                            }
+                                            row.append(button)
+                                    if row:
+                                        keyboard.append(row)
+                                        
+                                send_message_with_keyboard(
+                                    chat_id,
+                                    "🕒 Укажите ваш часовой пояс (для правильной отправки напоминаний):",
+                                    keyboard
+                                )
+                                
+                            except Exception as e:
+                                if connection:
+                                    connection.rollback()
+                                logger.error(f"Ошибка при обновлении даты начала тренировок: {e}")
+                                send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                            finally:
+                                if cursor:
+                                    cursor.close()
+                                if connection:
+                                    connection.close()
+                                
+                        except Exception as e:
+                            logger.error(f"Ошибка при обработке даты начала тренировок: {e}", exc_info=True)
+                            send_telegram_message(
+                                chat_id, 
+                                "❌ Пожалуйста, укажите дату в формате ДД.ММ.ГГГГ (например, 01.06.2025)."
+                            )
+                            return
+                    
                     # Если профиль находится на другом этапе или не обрабатывается через интерактивный диалог
                     else:
                         # Обычное текстовое сообщение (не часть создания профиля)
@@ -779,6 +872,68 @@ def handle_callback_query(application, update_data):
                 logger.error(f"Ошибка при обработке установки опыта бега: {e}", exc_info=True)
                 send_telegram_message(chat_id, "❌ Произошла ошибка при установке опыта бега. Пожалуйста, попробуйте позже.")
                 
+        elif callback_data.startswith('set_fitness_'):
+            # Обработка установки уровня физической подготовки
+            try:
+                # Получаем значение уровня подготовки из callback_data
+                fitness_code = callback_data.split('_')[-1]  # 'beginner', 'intermediate', 'advanced'
+                
+                # Преобразуем код уровня подготовки в текст для сохранения
+                fitness_map = {
+                    "beginner": "Начинающий", 
+                    "intermediate": "Средний", 
+                    "advanced": "Продвинутый"
+                }
+                fitness_text = fitness_map.get(fitness_code, "Не указан")
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Обновляем уровень подготовки в профиле
+                connection = DBManager.get_connection()
+                cursor = connection.cursor()
+                
+                try:
+                    cursor.execute(
+                        "UPDATE runner_profiles SET fitness = %s WHERE user_id = %s",
+                        (fitness_text, db_user_id)
+                    )
+                    connection.commit()
+                    
+                    # Отправляем сообщение об успешном обновлении
+                    send_telegram_message(
+                        chat_id, 
+                        f"✅ Уровень физической подготовки успешно установлен: {fitness_text}."
+                    )
+                    
+                    # Спрашиваем о недельном объеме бега
+                    send_telegram_message(
+                        chat_id, 
+                        "🏃 Укажите ваш текущий средний недельный объем бега в километрах:"
+                    )
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    logger.error(f"Ошибка при обновлении уровня подготовки: {e}")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                finally:
+                    if cursor:
+                        cursor.close()
+                    if connection:
+                        connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Ошибка при обработке установки уровня подготовки: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при установке уровня подготовки. Пожалуйста, попробуйте позже.")
+                
         elif callback_data.startswith('set_goal_'):
             # Обработка установки цели тренировок
             try:
@@ -841,6 +996,82 @@ def handle_callback_query(application, update_data):
             except Exception as e:
                 logger.error(f"Ошибка при обработке установки цели тренировок: {e}", exc_info=True)
                 send_telegram_message(chat_id, "❌ Произошла ошибка при установке цели тренировок. Пожалуйста, попробуйте позже.")
+                
+        elif callback_data.startswith('set_timezone_'):
+            # Обработка установки часового пояса
+            try:
+                # Получаем значение часового пояса из callback_data
+                timezone_offset = int(callback_data.split('_')[-1])
+                
+                # Формируем строку часового пояса
+                sign = "+" if timezone_offset >= 0 else ""
+                timezone_text = f"UTC{sign}{timezone_offset}"
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем ID пользователя из базы данных
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Обновляем часовой пояс в профиле
+                connection = DBManager.get_connection()
+                cursor = connection.cursor()
+                
+                try:
+                    cursor.execute(
+                        "UPDATE runner_profiles SET timezone = %s WHERE user_id = %s",
+                        (timezone_text, db_user_id)
+                    )
+                    connection.commit()
+                    
+                    # Отправляем сообщение об успешном обновлении
+                    send_telegram_message(
+                        chat_id, 
+                        f"✅ Часовой пояс успешно установлен: {timezone_text}."
+                    )
+                    
+                    # Получаем полный профиль после всех обновлений
+                    profile = DBManager.get_runner_profile(db_user_id)
+                    
+                    # Формируем сообщение с полным профилем
+                    profile_message = "🏃 *Ваш профиль бегуна*\n\n"
+                    profile_message += f"Дистанция: {profile.get('distance', 'Не указана')} км\n"
+                    profile_message += f"Дата соревнования: {profile.get('competition_date', 'Не указана')}\n"
+                    profile_message += f"Пол: {profile.get('gender', 'Не указан')}\n"
+                    profile_message += f"Возраст: {profile.get('age', 'Не указан')} лет\n"
+                    profile_message += f"Рост: {profile.get('height', 'Не указан')} см\n"
+                    profile_message += f"Вес: {profile.get('weight', 'Не указан')} кг\n"
+                    profile_message += f"Опыт бега: {profile.get('experience', 'Не указан')}\n"
+                    profile_message += f"Цель тренировок: {profile.get('goal', 'Не указана')}\n"
+                    profile_message += f"Целевое время: {profile.get('target_time', 'Не указано')}\n"
+                    profile_message += f"Уровень подготовки: {profile.get('fitness', 'Не указан')}\n"
+                    profile_message += f"Недельный объем: {profile.get('weekly_volume', 'Не указан')} км\n"
+                    profile_message += f"Дата начала тренировок: {profile.get('training_start_date', 'Не указана')}\n"
+                    profile_message += f"Часовой пояс: {profile.get('timezone', 'Не указан')}\n\n"
+                    
+                    profile_message += "✅ Профиль бегуна успешно создан! Теперь вы можете создать свой план тренировок, используя команду /plan."
+                    
+                    # Отправляем сообщение с полным профилем
+                    send_telegram_message(chat_id, profile_message, parse_mode="Markdown")
+                    
+                except Exception as e:
+                    if connection:
+                        connection.rollback()
+                    logger.error(f"Ошибка при обновлении часового пояса: {e}")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при обновлении профиля.")
+                finally:
+                    if cursor:
+                        cursor.close()
+                    if connection:
+                        connection.close()
+                    
+            except Exception as e:
+                logger.error(f"Ошибка при обработке установки часового пояса: {e}", exc_info=True)
+                send_telegram_message(chat_id, "❌ Произошла ошибка при установке часового пояса. Пожалуйста, попробуйте позже.")
                 
         elif callback_data.startswith('set_gender_'):
             # Обработка установки пола
