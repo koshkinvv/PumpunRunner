@@ -40,6 +40,40 @@ def format_weekly_volume(volume, default_value="0"):
     # Иначе добавляем единицу измерения
     return f"{volume} км/неделю"
 
+def format_training_plan_message(plan):
+    """
+    Форматирует план тренировок для отображения пользователю.
+    
+    Args:
+        plan: Словарь с данными плана тренировок
+        
+    Returns:
+        Отформатированная строка с планом тренировок
+    """
+    if not plan or 'plan_data' not in plan:
+        return "Ошибка: план тренировок не найден или имеет неверный формат."
+    
+    plan_data = plan.get('plan_data', {})
+    plan_name = plan_data.get('plan_name', 'План тренировок')
+    plan_description = plan_data.get('plan_description', 'Нет описания')
+    training_days = plan_data.get('training_days', [])
+    
+    if not training_days:
+        return f"*{plan_name}*\n\n{plan_description}\n\nНет тренировок в плане."
+    
+    # Формируем заголовок и описание плана
+    message = f"*{plan_name}*\n\n{plan_description}\n\n"
+    
+    # Добавляем информацию о каждом дне тренировки
+    for i, day in enumerate(training_days):
+        message += f"*День {i+1}: {day.get('day', 'День недели')} ({day.get('date', 'Дата')})*\n"
+        message += f"Тип: {day.get('training_type', 'Не указан')}\n"
+        message += f"Дистанция: {day.get('distance', 'Не указана')}\n"
+        message += f"Темп: {day.get('pace', 'Не указан')}\n"
+        message += f"Описание: {day.get('description', 'Нет описания')}\n\n"
+    
+    return message
+
 async def help_command(update, context):
     """Handler for the /help command."""
     # Добавим проверку работы часовых поясов
