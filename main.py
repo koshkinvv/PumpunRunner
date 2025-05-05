@@ -556,4 +556,5 @@ def main():
         release_lock(lock_file_handle)
 
 if __name__ == '__main__':
+    # Обычный запуск основной функции
     main()
