@@ -3,7 +3,9 @@ import json
 import io
 from datetime import datetime, timedelta
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
+# Определяем константу ConversationHandler.END
+END = ConversationHandler.END
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
 from config import TELEGRAM_TOKEN, logging, STATES
 from models import create_tables
@@ -1641,6 +1643,36 @@ def setup_bot():
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CommandHandler("pending", pending_trainings_command))
     
+    # Добавляем обработчик команды отмены
+    async def cancel_command(update, context):
+        """Handler for the /cancel command - cancels current conversation."""
+        # Очищаем данные диалога
+        context.user_data.clear()
+        
+        # Сначала отправляем сообщение об отмене без клавиатуры
+        await update.message.reply_text(
+            "❌ Операция отменена. Ваш профиль остался без изменений.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        # Затем показываем основные кнопки меню
+        keyboard = ReplyKeyboardMarkup(
+            [
+                ["👁️ Посмотреть текущий план", "🆕 Создать новый план"],
+                ["✏️ Обновить мой профиль", "🏃‍♂️ Показать мой профиль"]
+            ],
+            resize_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            "Что бы вы хотели сделать дальше?",
+            reply_markup=keyboard
+        )
+        
+        return END
+        
+    application.add_handler(CommandHandler("cancel", cancel_command))
+    
     # Добавляем обработчик команды обновления профиля
     async def update_profile_command(update, context):
         """Handler for the /update command - starts runner profile update dialog."""
@@ -1920,37 +1952,8 @@ def setup_bot():
                 )
                 
         elif text == "✏️ Обновить мой профиль":
-            # Запускаем функцию обновления профиля напрямую, имитируя команду /update
-            # Получаем текущий профиль бегуна
-            runner_profile = DBManager.get_runner_profile(db_user_id)
-            if runner_profile:
-                # Создаем новую сессию обновления профиля
-                
-                # Начинаем диалог обновления профиля с первого шага - дистанции
-                # Показываем текущее значение для каждого поля
-                context.user_data['db_user_id'] = db_user_id
-                context.user_data['profile_data'] = {}
-                
-                # Запрос новой дистанции
-                from telegram import ReplyKeyboardMarkup
-                await update.message.reply_text(
-                    f"Начинаем обновление вашего профиля бегуна.\n"
-                    f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
-                    f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
-                    f"Введите новую целевую дистанцию (в км):",
-                    reply_markup=ReplyKeyboardMarkup(
-                        [['5', '10'], ['21', '42']], 
-                        one_time_keyboard=True,
-                        resize_keyboard=True
-                    )
-                )
-                
-                return STATES['DISTANCE']
-            else:
-                # Если профиль не найден, предложим создать новый
-                await update.message.reply_text(
-                    "У вас еще нет профиля бегуна. Давайте создадим его с помощью команды /start."
-                )
+            # Запускаем update_profile_command напрямую
+            await update_profile_command(update, context)
     
     # Регистрируем обработчик текстовых сообщений
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
