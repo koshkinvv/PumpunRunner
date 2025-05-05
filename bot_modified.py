@@ -331,6 +331,113 @@ async def callback_query_handler(update, context):
     original_callback_data = query.data
     context.user_data['last_callback'] = original_callback_data
     
+    # Обработка кнопок подтверждения создания нового плана
+    if query.data == "confirm_new_plan":
+        # Пользователь подтвердил создание нового плана с теми же параметрами
+        # Отправляем сообщение с котиком
+        with open("attached_assets/котик.jpeg", "rb") as photo:
+            await query.message.reply_photo(
+                photo=photo,
+                caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+            )
+        
+        # Получаем профиль пользователя
+        profile = DBManager.get_runner_profile(db_user_id)
+        
+        # Генерируем новый план
+        try:
+            # Инициализируем сервис OpenAI
+            openai_service = OpenAIService()
+            
+            # Генерируем план
+            plan = openai_service.generate_training_plan(profile)
+            
+            # Сохраняем план в БД
+            plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
+            
+            if not plan_id:
+                await query.message.reply_text(
+                    "❌ Произошла ошибка при сохранении плана тренировок."
+                )
+                return
+            
+            # Получаем сохраненный план
+            saved_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            
+            # Отправляем план пользователю
+            await query.message.reply_text(
+                f"✅ Ваш персонализированный план тренировок готов!\n\n"
+                f"*{saved_plan['plan_name']}*\n\n"
+                f"{saved_plan['plan_description']}",
+                parse_mode='Markdown'
+            )
+            
+            # Показываем главное меню после генерации плана
+            await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
+            
+            # Отправляем дни тренировок
+            # Определяем структуру плана
+            training_days = []
+            if 'training_days' in saved_plan:
+                training_days = saved_plan['training_days']
+            elif 'plan_data' in saved_plan and isinstance(saved_plan['plan_data'], dict) and 'training_days' in saved_plan['plan_data']:
+                training_days = saved_plan['plan_data']['training_days']
+            else:
+                logging.error(f"Неверная структура плана: {saved_plan.keys()}")
+                await query.message.reply_text("❌ Ошибка в структуре плана тренировок.")
+                return
+            
+            for idx, day in enumerate(training_days):
+                training_day_num = idx + 1
+                
+                # Создаем сообщение с днем тренировки
+                # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
+                training_type = day.get('training_type') or day.get('type', 'Не указан')
+                
+                training_message = (
+                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {training_type}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
+                )
+                
+                # Добавляем кнопки
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Отметить как выполненное", 
+                                         callback_data=f"complete_{saved_plan['id']}_{training_day_num}")],
+                    [InlineKeyboardButton("❌ Отменить", 
+                                         callback_data=f"cancel_{saved_plan['id']}_{training_day_num}")]
+                ])
+                
+                await query.message.reply_text(
+                    training_message,
+                    reply_markup=keyboard,
+                    parse_mode='Markdown'
+                )
+                
+        except Exception as e:
+            logging.error(f"Ошибка генерации плана: {e}")
+            await query.message.reply_text(
+                "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
+            )
+            
+            # Показываем главное меню после ошибки генерации плана
+            await send_main_menu(update, context, "Что вы хотите сделать?")
+        
+        return
+    
+    elif query.data == "update_profile_first":
+        # Пользователь решил сначала обновить профиль
+        await update_profile_command(update, context)
+        return
+    
+    elif query.data == "cancel_new_plan":
+        # Пользователь отменил создание нового плана
+        await query.message.reply_text("Создание нового плана отменено.")
+        await send_main_menu(update, context, "Что вы хотите сделать?")
+        return
+    
     # Обработка кнопки "Помощь"
     if query.data == "help":
         help_text = (
