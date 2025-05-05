@@ -1170,10 +1170,23 @@ async def callback_query_handler(update, context):
                         )
                         return
             
-            # Получаем текущий план
-            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-            if not current_plan or current_plan['id'] != plan_id:
-                await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
+            # Получаем план по ID или последний план
+            try:
+                # Сначала пробуем получить план по ID из callback_data
+                current_plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+                
+                # Если не нашли план по ID, попробуем использовать последний план
+                if not current_plan:
+                    current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+                    logging.info(f"План по ID {plan_id} не найден, пробуем использовать последний план: {current_plan['id'] if current_plan else 'Нет плана'}")
+                
+                # Если план все равно не найден, сообщаем пользователю
+                if not current_plan:
+                    await query.message.reply_text("❌ Не удалось найти план тренировок. Пожалуйста, создайте новый план с помощью команды /plan")
+                    return
+            except Exception as e:
+                logging.error(f"Ошибка при получении плана тренировок: {e}")
+                await query.message.reply_text("❌ Произошла ошибка при получении плана тренировок. Пожалуйста, попробуйте позже.")
                 return
             
             # Расчет общего пройденного расстояния
