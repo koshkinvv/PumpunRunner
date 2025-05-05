@@ -9,7 +9,7 @@ deploymentTarget = "gce"
 run = ["sh", "-c", "bash run_24_7.sh"]
 
 [workflows]
-runButton = "Bot 24/7"
+runButton = "bot_runner"
 
 [[workflows.workflow]]
 name = "Project"

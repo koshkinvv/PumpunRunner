@@ -309,24 +309,38 @@ def handle_callback_query(application, update_data):
                             canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
                             processed_days = completed_days + canceled_days
                             
+                            # Логируем информацию о тренировках
+                            logger.info(f"План {plan_id} для пользователя {chat_id}: завершенные дни {completed_days}, отмененные дни {canceled_days}")
+                            
                             # Количество тренировок в плане
                             total_days = len(plan['plan_data']['training_days'])
+                            logger.info(f"Всего дней в плане: {total_days}")
                             
                             # Проверка, все ли тренировки выполнены или отменены
-                            has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
+                            pending_days = [day for day in range(1, total_days + 1) if day not in processed_days]
+                            has_pending_trainings = len(pending_days) > 0
+                            logger.info(f"Ожидающие дни: {pending_days}, есть ожидающие: {has_pending_trainings}")
                             
                             # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
                             if not has_pending_trainings:
+                                logger.info(f"Все тренировки завершены для пользователя {chat_id}, план {plan_id}")
+                                
                                 # Расчет общего пройденного расстояния
                                 total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                                logger.info(f"Общее пройденное расстояние: {total_distance} км")
                                 
                                 # Получаем обновленный еженедельный объем в профиле пользователя
                                 profile = DBManager.get_runner_profile(db_user_id)
                                 weekly_volume = profile.get('weekly_volume', 0) if profile else 0
+                                logger.info(f"Текущий еженедельный объем: {weekly_volume} км")
                                 
-                                # Форматируем для отображения
-                                from bot_modified import format_weekly_volume
-                                formatted_volume = format_weekly_volume(weekly_volume, str(total_distance))
+                                # Импортируем функцию форматирования
+                                try:
+                                    from bot_modified import format_weekly_volume
+                                    formatted_volume = format_weekly_volume(weekly_volume, str(total_distance))
+                                except ImportError:
+                                    logger.error("Не удалось импортировать format_weekly_volume из bot_modified")
+                                    formatted_volume = f"{weekly_volume} км"
                                 
                                 # Создаем кнопку для продолжения тренировок
                                 continue_button = {
@@ -335,25 +349,37 @@ def handle_callback_query(application, update_data):
                                 }
                                 keyboard = [[continue_button]]
                                 
-                                # Отправляем сообщение напрямую через API
-                                url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-                                data = {
-                                    "chat_id": chat_id,
-                                    "text": (
-                                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
-                                        f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {formatted_volume}.\n\n"
-                                        f"Хотите продолжить тренировки с учетом вашего прогресса?"
-                                    ),
-                                    "reply_markup": {
-                                        "inline_keyboard": keyboard
-                                    }
-                                }
+                                # Формируем сообщение
+                                congratulation_message = (
+                                    f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                                    f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {formatted_volume}.\n\n"
+                                    f"Хотите продолжить тренировки с учетом вашего прогресса?"
+                                )
                                 
-                                response = requests.post(url, json=data)
-                                if response.status_code != 200:
-                                    logger.error(f"Ошибка при отправке поздравления: {response.text}")
+                                logger.info(f"Отправляем поздравление пользователю {chat_id}: {congratulation_message}")
+                                
+                                # Отправляем сообщение напрямую через API
+                                try:
+                                    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+                                    data = {
+                                        "chat_id": chat_id,
+                                        "text": congratulation_message,
+                                        "reply_markup": {
+                                            "inline_keyboard": keyboard
+                                        }
+                                    }
+                                    
+                                    response = requests.post(url, json=data)
+                                    response_data = response.json()
+                                    
+                                    if response.status_code == 200 and response_data.get('ok'):
+                                        logger.info(f"Поздравление успешно отправлено пользователю {chat_id}")
+                                    else:
+                                        logger.error(f"Ошибка при отправке поздравления: {response.text}")
+                                except Exception as e:
+                                    logger.error(f"Исключение при отправке поздравления: {e}")
                         except Exception as e:
-                            logger.error(f"Ошибка при проверке статуса плана: {e}")
+                            logger.error(f"Ошибка при проверке статуса плана: {e}", exc_info=True)
                         
                         # Обновляем сообщение, заменяя кнопки на отметку о выполнении
                         message_id = callback_query['message']['message_id']
