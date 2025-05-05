@@ -471,7 +471,47 @@ async def callback_query_handler(update, context):
     
     elif query.data == "update_profile_first":
         # Пользователь решил сначала обновить профиль
-        await update_profile_command(update, context)
+        # Вместо вызова update_profile_command, который пытается создать сложную логику,
+        # реализуем простой подход напрямую здесь
+        
+        # Получаем идентификатор пользователя
+        telegram_id = update.effective_user.id
+        db_user_id = DBManager.get_user_id(telegram_id)
+        
+        # Получаем профиль пользователя
+        runner_profile = DBManager.get_runner_profile(db_user_id)
+        
+        # Подготавливаем контекст
+        context.user_data['db_user_id'] = db_user_id
+        context.user_data['profile_data'] = {}
+        context.user_data['is_profile_update'] = True
+        
+        # Подготавливаем клавиатуру для выбора дистанции
+        from telegram import ReplyKeyboardMarkup
+        
+        keyboard = ReplyKeyboardMarkup(
+            [['5', '10'], ['21', '42']], 
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        # Отправляем сообщение с запросом дистанции
+        await query.message.reply_text(
+            f"Давайте обновим ваш профиль бегуна.\n"
+            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+            f"Введите новую целевую дистанцию (в км):",
+            reply_markup=keyboard
+        )
+        
+        # Пользователь должен ответить на вопрос о дистанции, и его ответ будет
+        # обработан уже существующим обработчиком RunnerProfileConversation
+        # Нам не нужно импортировать STATES, так как мы не передаем их обратно
+        
+        # Это позволит боту подхватить ответ пользователя и продолжить диалог
+        # Не возвращаем STATES['DISTANCE'], т.к. это не будет работать в callback_query_handler
+        # Просто возвращаем, чтобы завершить callback обработчик
+        # Бот продолжит диалог через существующий ConversationHandler
         return
     
     elif query.data == "cancel_new_plan":
