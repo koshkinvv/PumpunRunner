@@ -18,38 +18,13 @@ from image_analyzer import ImageAnalyzer
 
 async def send_main_menu(update, context, message_text="Что вы хотите сделать?"):
     """Отправляет главное меню с кнопками."""
-    telegram_id = update.effective_user.id
-    db_user_id = DBManager.get_user_id(telegram_id)
-    
-    # Проверка на существование профиля
-    has_profile = False
-    if db_user_id:
-        profile = DBManager.get_runner_profile(db_user_id)
-        has_profile = profile is not None
-    
-    # Проверка на существование плана
-    has_plan = False
-    if has_profile:
-        plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-        has_plan = plan is not None
-    
-    # Формируем кнопки в зависимости от состояния пользователя
-    buttons = []
-    
-    if has_plan:
-        buttons.append([InlineKeyboardButton("👁️ Посмотреть текущий план", callback_data="view_plan")])
-        buttons.append([InlineKeyboardButton("🆕 Создать новый план", callback_data="new_plan")])
-    elif has_profile:
-        buttons.append([InlineKeyboardButton("🏋️ Подготовить план тренировок", callback_data="generate_plan")])
-    
-    if has_profile:
-        buttons.append([InlineKeyboardButton("✏️ Обновить мой профиль", callback_data="update_profile")])
-        buttons.append([InlineKeyboardButton("🏃‍♂️ Показать мой профиль", callback_data="show_profile")])
-    
-    buttons.append([InlineKeyboardButton("❓ Помощь", callback_data="help")])
-    
-    # Создаем клавиатуру
-    keyboard = InlineKeyboardMarkup(buttons)
+    # Создаем кнопки в стиле ReplyKeyboardMarkup как на скриншоте
+    keyboard = ReplyKeyboardMarkup([
+        ["👁️ Посмотреть текущий план"],
+        ["🆕 Создать новый план"],
+        ["✏️ Обновить мой профиль"],
+        ["🏃‍♂️ Показать мой профиль"]
+    ], resize_keyboard=True)
     
     # Отправляем сообщение с кнопками
     if hasattr(update, 'callback_query') and update.callback_query:
@@ -1813,15 +1788,6 @@ def setup_bot():
         if not db_user_id:
             await update.message.reply_text(
                 "Пожалуйста, используйте команду /start, чтобы начать работу с ботом."
-            )
-            
-            # Показываем главное меню даже при отсутствии профиля пользователя
-            # с базовыми командами
-            await update.message.reply_text(
-                "Для начала работы, нажмите кнопку ниже или введите команду /start:",
-                reply_markup=ReplyKeyboardMarkup([
-                    ["🚀 Начать работу с ботом"]
-                ], resize_keyboard=True)
             )
             return
         
