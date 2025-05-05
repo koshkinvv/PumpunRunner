@@ -305,6 +305,75 @@ class OpenAIService:
             logging.error(f"Error adjusting plan after cancellation: {e}")
             return None
     
+    def adjust_plan_after_difference(self, runner_profile, current_plan, day_number, actual_distance, planned_distance, diff_percent):
+        """
+        Корректирует план тренировок на основе значительной разницы между 
+        запланированной и фактической дистанцией конкретной тренировки.
+        
+        Args:
+            runner_profile: Dictionary containing runner profile information
+            current_plan: Dictionary containing the current training plan
+            day_number: The day number (1-based index) that was just completed
+            actual_distance: The actual distance that was run
+            planned_distance: The planned distance for the completed training
+            diff_percent: The percentage difference between actual and planned distances
+            
+        Returns:
+            Dictionary containing the adjusted training plan
+        """
+        try:
+            # Подготовка промпта для корректировки плана
+            prompt = (
+                f"Ты опытный тренер по бегу. Бегун только что завершил тренировку, и его фактическая "
+                f"дистанция ({actual_distance} км) значительно отличается от запланированной "
+                f"({planned_distance} км) на {diff_percent:.1f}%. Нужно скорректировать оставшиеся дни плана.\n\n"
+                
+                f"Профиль бегуна:\n"
+                f"- Дистанция соревнования: {runner_profile.get('distance', 'Не указано')} км\n"
+                f"- Дата соревнования: {runner_profile.get('competition_date', 'Не указано')}\n"
+                f"- Пол: {runner_profile.get('gender', 'Не указано')}\n"
+                f"- Возраст: {runner_profile.get('age', 'Не указано')}\n"
+                f"- Рост: {runner_profile.get('height', 'Не указано')} см\n"
+                f"- Вес: {runner_profile.get('weight', 'Не указано')} кг\n"
+                f"- Опыт бега: {runner_profile.get('experience', 'Не указано')}\n"
+                f"- Цель: {runner_profile.get('goal', 'Не указано')}\n"
+                f"- Целевое время: {runner_profile.get('target_time', 'Не указано')}\n"
+                f"- Уровень физической подготовки: {runner_profile.get('fitness_level', runner_profile.get('fitness', 'Не указано'))}\n"
+                f"- Еженедельный объем бега: {runner_profile.get('weekly_volume_text', runner_profile.get('weekly_volume', 'Не указано'))} км\n\n"
+                
+                f"Текущий план тренировок:\n{json.dumps(current_plan, ensure_ascii=False, indent=2)}\n\n"
+                
+                f"День {day_number} был только что выполнен.\n"
+                f"Запланированная дистанция: {planned_distance} км\n"
+                f"Фактическая дистанция: {actual_distance} км\n"
+                f"Разница: {diff_percent:.1f}%\n\n"
+                
+                f"Пожалуйста, скорректируй оставшиеся дни плана, учитывая фактическое выполнение. "
+                f"Не меняй дни, которые уже прошли (дни до {day_number} включительно).\n\n"
+                
+                f"Ответ предоставь в формате JSON, сохраняя структуру оригинального плана."
+            )
+            
+            # Вызов OpenAI API
+            response = self.client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "Ты опытный тренер по бегу, который составляет персонализированные планы тренировок."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            
+            # Обработка ответа
+            adjusted_plan = json.loads(response.choices[0].message.content)
+            
+            return adjusted_plan
+        except Exception as e:
+            logging.error(f"Ошибка при корректировке плана тренировок: {e}")
+            logging.error(traceback.format_exc())  # Добавляем полный трейсбек для отладки
+            return None
+    
     def generate_training_plan_continuation(self, runner_profile, completed_distances, current_plan):
         """
         Generate a continuation of an existing running training plan based on runner profile

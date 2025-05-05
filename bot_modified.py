@@ -1175,34 +1175,96 @@ async def callback_query_handler(update, context):
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
-            # Сильно упрощенная обработка для диагностики
-            logging.warning(f"===== НАЖАТА КНОПКА КОРРЕКТИРОВКИ ПЛАНА =====")
-            logging.warning(f"Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
-            logging.warning(f"Callback data: {query.data}")
+            logging.info(f"===== НАЖАТА КНОПКА КОРРЕКТИРОВКИ ПЛАНА =====")
+            logging.info(f"Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
+            logging.info(f"Callback data: {query.data}")
             
-            # Извлекаем параметры для отображения
+            # Извлекаем параметры из callback_data
+            # Формат: adjust_plan_PLAN_ID_DAY_NUMBER_ACTUAL_DISTANCE_PLANNED_DISTANCE
             parts = query.data.split('_')
             
-            # Отладочная информация о разбитом callback_data
-            debug_text = f"Получен callback: {query.data}\n"
-            debug_text += f"Количество частей: {len(parts)}\n"
-            debug_text += f"Части: {', '.join(parts)}\n\n"
+            if len(parts) < 6:
+                await query.message.reply_text("❌ Некорректный формат данных для корректировки плана.")
+                return
+                
+            try:
+                plan_id = int(parts[2])
+                day_number = int(parts[3])
+                actual_distance = float(parts[4])
+                planned_distance = float(parts[5])
+                
+                logging.info(f"Извлеченные параметры: plan_id={plan_id}, day_number={day_number}, actual_distance={actual_distance}, planned_distance={planned_distance}")
+            except (ValueError, IndexError) as e:
+                logging.error(f"Ошибка при обработке параметров callback: {e}")
+                await query.message.reply_text("❌ Некорректные данные в запросе корректировки плана.")
+                return
             
-            # Сразу отвечаем пользователю, чтобы убедиться, что callback работает
-            await query.message.reply_text(
-                f"✅ Получена команда корректировки плана!\n\n"
-                f"{debug_text}"
-                f"В данный момент функция находится в режиме отладки."
+            # Получаем профиль бегуна
+            profile = DBManager.get_runner_profile(db_user_id)
+            if not profile:
+                await query.message.reply_text("❌ Не удалось найти профиль бегуна.")
+                return
+                
+            # Получаем план тренировок
+            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            if not plan or plan['id'] != plan_id:
+                await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
+                return
+            
+            # Отправляем сообщение о начале корректировки
+            processing_message = await query.message.reply_text(
+                "⏳ Разрабатываем скорректированный план тренировок...\n"
+                "Это может занять некоторое время, пожалуйста, подождите."
             )
             
-            # Отправляем еще одно сообщение для уверенности, что связь работает
-            await context.bot.send_message(
-                chat_id=update.effective_user.id,
-                text="Обработчик кнопки 'Скорректировать план' успешно вызван. Команда получена."
+            # Расчет разницы между запланированной и фактической дистанциями
+            diff_percent = ((actual_distance - planned_distance) / planned_distance) * 100
+            logging.info(f"Разница между фактической и плановой дистанцией: {diff_percent:.1f}%")
+            
+            # Корректируем план с помощью OpenAI
+            openai_service = OpenAIService()
+            adjusted_plan = openai_service.adjust_plan_after_difference(
+                profile, 
+                plan['plan_data'], 
+                day_number,
+                actual_distance,
+                planned_distance,
+                diff_percent
             )
             
+            if not adjusted_plan:
+                await processing_message.edit_text("❌ Не удалось скорректировать план тренировок.")
+                return
+                
+            # Обновляем план в базе данных
+            success = TrainingPlanManager.update_training_plan(
+                db_user_id, 
+                plan_id, 
+                adjusted_plan
+            )
+            
+            if success:
+                await processing_message.edit_text(
+                    "✅ План тренировок успешно скорректирован!\n\n"
+                    f"Оставшиеся тренировки были адаптированы с учетом вашего фактического выполнения "
+                    f"({actual_distance} км вместо запланированных {planned_distance} км)."
+                )
+                
+                # Отправляем обновленный план
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("👁 Посмотреть обновленный план", callback_data="view_plan")]
+                ])
+                
+                await query.message.reply_text(
+                    "📋 Ваш план тренировок был скорректирован. Вы можете посмотреть обновленные тренировки:",
+                    reply_markup=keyboard
+                )
+            else:
+                await processing_message.edit_text("❌ Не удалось обновить план тренировок в базе данных.")
+                
         except Exception as e:
             logging.error(f"Error adjusting plan: {e}")
+            logging.error(traceback.format_exc())
             await query.message.reply_text("❌ Произошла ошибка при корректировке плана.")
     
     # Обработка кнопки "Продолжить тренировки"
