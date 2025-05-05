@@ -315,32 +315,46 @@ async def update_profile_command(update, context):
             "Вы можете отменить процесс в любой момент, отправив команду /cancel."
         )
         
-        # Создаем новый Update объект, который имитирует сообщение
-        # Это необходимо, так как start_update ожидает update.message
-        from telegram import Update as TelegramUpdate
-        from telegram import Message, Chat, User
+        # Более простой подход - регистрируем обработчик напрямую 
+        # Получаем идентификатор пользователя
+        telegram_id = update.effective_user.id
+        db_user_id = DBManager.get_user_id(telegram_id)
         
-        # Получаем оригинальное сообщение из callback_query
-        orig_message = update.callback_query.message
+        # Получаем профиль пользователя
+        runner_profile = DBManager.get_runner_profile(db_user_id)
         
-        # Создаем новый объект Message
-        new_message = Message(
-            message_id=orig_message.message_id,
-            date=orig_message.date,
-            chat=orig_message.chat,
-            from_user=update.effective_user,  # Используем пользователя из оригинального update
-            text="/update",  # Имитируем команду /update
-            bot=orig_message.bot
+        # Сохраняем информацию в context.user_data напрямую
+        context.user_data['db_user_id'] = db_user_id
+        context.user_data['profile_data'] = {}
+        context.user_data['is_profile_update'] = True
+        
+        # Импортируем константы состояний
+        from config import STATES
+        
+        # Отправляем сообщение с запросом дистанции
+        from telegram import ReplyKeyboardMarkup
+        
+        await update.callback_query.message.reply_text(
+            f"Начинаем обновление вашего профиля бегуна.\n"
+            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+            f"Введите новую целевую дистанцию (в км):",
+            reply_markup=ReplyKeyboardMarkup(
+                [['5', '10'], ['21', '42']], 
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
         )
         
-        # Создаем новый объект Update
-        new_update = TelegramUpdate(
-            update_id=update.update_id,
-            message=new_message
-        )
+        # Зарегистрируем этот чат для обработки ConversationHandler
+        # Вместо использования ApplicationHandlerStop, 
+        # просто возвращаем управление, чтобы диалог мог продолжиться через profile_conv
+        # Предварительно настраиваем контекст
         
-        # Запускаем диалог обновления профиля с новым объектом Update
-        await profile_conv.start_update(new_update, context)
+        # Получаем объект ConversationHandler из хэндлеров приложения
+        # и запускаем первый этап диалога
+        from conversation import DISTANCE
+        return DISTANCE
     else:
         # Если метод вызван из команды
         await profile_conv.start_update(update, context)
