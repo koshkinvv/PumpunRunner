@@ -367,6 +367,9 @@ async def generate_plan_command(update, context):
             
             await update.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
         
+        # Отправляем приглашение в чат БЕТА тестеров
+        await update.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
+        
         # После отправки всех дней тренировки, показываем главное меню
         await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
             
@@ -543,6 +546,9 @@ async def callback_query_handler(update, context):
                 f"{saved_plan['plan_description']}",
                 parse_mode='Markdown'
             )
+            
+            # Отправляем приглашение в чат БЕТА тестеров
+            await query.message.reply_text("Если есть желание и время заходите в чатик БЕТА тестеров https://t.me/+oiEFpRKHRPA3ZDA6")
             
             # Показываем главное меню после генерации плана
             await send_main_menu(update, context, "Ваш план создан. Что еще вы хотите сделать?")
