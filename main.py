@@ -354,6 +354,38 @@ def setup_health_update():
 
 def main():
     """Main function to start the Telegram bot."""
+    
+    # Проверяем, возможно бот уже запущен через webhook-мониторинг
+    try:
+        with open("bot_health.txt", "r") as f:
+            health_data = f.read().strip()
+            
+        # Проверяем свежесть данных о здоровье
+        import datetime
+        now = datetime.datetime.now()
+        health_time = datetime.datetime.strptime(health_data, "%Y-%m-%d %H:%M:%S")
+        
+        # Если файл обновлялся недавно (менее 2 минут назад), значит webhook-монитор работает
+        if (now - health_time).total_seconds() < 120:
+            logging.info(f"Обнаружен активный webhook-монитор (последнее обновление: {health_data})")
+            
+            # Запускаем webhook_monitor.py для поддержки webhook
+            import os
+            import subprocess
+            
+            # Проверяем, существует ли файл webhook_monitor.py
+            if os.path.exists("webhook_monitor.py"):
+                logging.info("Запускаем webhook_monitor.py для поддержки webhook...")
+                subprocess.Popen(["python", "webhook_monitor.py"])
+                
+                # Ждем, чтобы бот успешно запустился и не завершался сразу
+                import time
+                time.sleep(60)
+                return
+    except Exception as e:
+        logging.warning(f"Не удалось определить статус webhook-монитора: {e}")
+    
+    # Если мы здесь, то продолжаем обычный запуск
     # Setup logging
     setup_logging()
 
