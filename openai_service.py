@@ -1,7 +1,7 @@
 import os
 import json
+import logging
 from openai import OpenAI
-from config import logging
 
 # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
 # do not change this unless explicitly requested by the user
@@ -266,7 +266,6 @@ class OpenAIService:
             
             # Проверяем, как быстро пользователь выполнил предыдущий план
             from datetime import datetime, timedelta
-            import logging
             
             # Пытаемся получить информацию о сроках выполнения предыдущего плана
             rapid_completion = False
