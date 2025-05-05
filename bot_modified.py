@@ -1700,34 +1700,32 @@ def setup_bot():
             )
             return
         
-        # Создаем новую сессию обновления профиля
-        conversation = RunnerProfileConversation()
-        
-        # Начинаем диалог обновления профиля с первого шага - дистанции
-        # Показываем текущее значение для каждого поля
-        context.user_data['db_user_id'] = db_user_id
-        context.user_data['profile_data'] = {}
-        
-        # Запрос новой дистанции
+        # Запускаем диалог обновления профиля через ConversationHandler
+        # Для этого просто отправим пользователю команду приглашения к обновлению
         await update.message.reply_text(
-            f"Начинаем обновление вашего профиля бегуна.\n"
-            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
-            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
-            f"Введите новую целевую дистанцию (в км):",
-            reply_markup=ReplyKeyboardMarkup(
-                [['5', '10'], ['21', '42']], 
-                one_time_keyboard=True,
-                resize_keyboard=True
-            )
+            "Запускаю процесс обновления профиля бегуна...",
+            reply_markup=ReplyKeyboardRemove()
         )
         
-        return STATES['DISTANCE']
+        # Запускаем обработчик диалога с шага INIT_UPDATE
+        conversation = RunnerProfileConversation()
+        await conversation.start_update(update, context)
+        
+        return
         
     application.add_handler(CommandHandler("update", update_profile_command))
     
-    # Add conversation handler for profile creation
+    # Add conversation handlers for profile creation and update
     conversation = RunnerProfileConversation()
-    application.add_handler(conversation.get_conversation_handler())
+    conv_handlers = conversation.get_conversation_handler()
+    
+    # Если get_conversation_handler вернул список обработчиков, добавляем каждый отдельно
+    if isinstance(conv_handlers, list):
+        for handler in conv_handlers:
+            application.add_handler(handler)
+    else:
+        # Если вернул один обработчик, добавляем его напрямую
+        application.add_handler(conv_handlers)
     
     # Add photo handler for analyzing workout screenshots
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))

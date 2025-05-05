@@ -26,6 +26,47 @@ class RunnerProfileConversation:
         """Initialize the conversation handler with empty profile data dict."""
         self.user_data = {}
     
+    async def start_update(self, update: Update, context: CallbackContext):
+        """Start the conversation for updating profile information."""
+        user = update.effective_user
+        telegram_id = user.id
+        
+        # Получаем id пользователя в БД
+        db_user_id = DBManager.get_user_id(telegram_id)
+        if not db_user_id:
+            await update.message.reply_text(
+                "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
+            )
+            return ConversationHandler.END
+        
+        # Получаем текущий профиль бегуна
+        runner_profile = DBManager.get_runner_profile(db_user_id)
+        if not runner_profile:
+            await update.message.reply_text(
+                "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
+            )
+            return ConversationHandler.END
+        
+        # Начинаем диалог обновления профиля с первого шага - дистанции
+        # Показываем текущее значение для каждого поля
+        context.user_data['db_user_id'] = db_user_id
+        context.user_data['profile_data'] = {}
+        
+        # Запрос новой дистанции
+        await update.message.reply_text(
+            f"Начинаем обновление вашего профиля бегуна.\n"
+            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+            f"Введите новую целевую дистанцию (в км):",
+            reply_markup=ReplyKeyboardMarkup(
+                [['5', '10'], ['21', '42']], 
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
+        
+        return STATES['DISTANCE']
+    
     async def start(self, update: Update, context: CallbackContext):
         """Start the conversation and save user information."""
         user = update.effective_user
@@ -874,7 +915,8 @@ class RunnerProfileConversation:
             CommandHandler, MessageHandler, filters, ConversationHandler
         )
         
-        return ConversationHandler(
+        # Создаем основной обработчик создания профиля
+        main_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start)],
             states={
                 STATES['DISTANCE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_distance)],
@@ -896,3 +938,31 @@ class RunnerProfileConversation:
             name="runner_profile_conversation",
             persistent=False,
         )
+        
+        # Создаем обработчик для обновления профиля
+        # Используем тот же класс ConversationHandler для обоих случаев (создание и обновление)
+        # Отличие только в том, что для обновления используется другая точка входа
+        update_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Regex(r'^✏️ Обновить мой профиль$'), self.start_update)],
+            states={
+                STATES['DISTANCE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_distance)],
+                STATES['COMPETITION_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_competition_date)],
+                STATES['GENDER']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_gender)],
+                STATES['AGE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_age)],
+                STATES['HEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_height)],
+                STATES['WEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weight)],
+                STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
+                STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
+                STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
+                STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
+                STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
+                STATES['TRAINING_DAYS_PER_WEEK']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_days_per_week)],
+                STATES['PREFERRED_TRAINING_DAYS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_preferred_training_days)],
+                STATES['CONFIRMATION']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_data)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+            name="update_profile_conversation",
+            persistent=False,
+        )
+        
+        return [main_handler, update_handler]
