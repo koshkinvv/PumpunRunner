@@ -709,6 +709,8 @@ class RunnerProfileConversation:
                 del context.user_data['temp_selected_days']
                 if 'days_to_select' in context.user_data:
                     del context.user_data['days_to_select']
+                if 'selected_days_list' in context.user_data:
+                    del context.user_data['selected_days_list']
                 
                 # Переходим к экрану подтверждения данных
                 return await self.show_confirmation(update, context)
@@ -727,6 +729,8 @@ class RunnerProfileConversation:
                 del context.user_data['confirming_days_mismatch']
                 if 'temp_selected_days' in context.user_data:
                     del context.user_data['temp_selected_days']
+                if 'selected_days_list' in context.user_data:
+                    del context.user_data['selected_days_list']
                 
                 await update.message.reply_text(
                     f"Выберите {days_to_select} дней недели, когда вам удобно тренироваться.\n"
@@ -748,9 +752,102 @@ class RunnerProfileConversation:
                 )
                 return STATES['PREFERRED_TRAINING_DAYS']
         
-        # Разбиваем текст на дни недели
-        selected_days = [day.strip() for day in text.split(',')]
+        # Проверяем, если это один день недели (нажата кнопка)
         valid_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        if text in valid_days:
+            # Пользователь нажал кнопку с одним днем недели
+            # Добавляем день в список выбранных дней
+            selected_days_list = context.user_data.get('selected_days_list', [])
+            
+            # Проверяем, не выбран ли уже этот день
+            if text in selected_days_list:
+                # День уже выбран, удаляем его из списка
+                selected_days_list.remove(text)
+            else:
+                # Добавляем день в список
+                selected_days_list.append(text)
+            
+            # Сохраняем обновленный список
+            context.user_data['selected_days_list'] = selected_days_list
+            days_to_select = int(context.user_data.get('days_to_select', 3))
+            
+            # Сообщаем пользователю о текущем выборе
+            current_selection = ", ".join(selected_days_list) if selected_days_list else "не выбрано"
+            
+            # Создаем клавиатуру для продолжения выбора или завершения
+            days_of_week = [["Пн", "Вт", "Ср"], ["Чт", "Пт", "Сб", "Вс"]]
+            
+            # Добавляем кнопку завершения выбора, если уже есть выбранные дни
+            if selected_days_list:
+                days_of_week.append(["✅ Завершить выбор"])
+            
+            reply_markup = ReplyKeyboardMarkup(
+                days_of_week,
+                one_time_keyboard=False,
+                resize_keyboard=True
+            )
+            
+            await update.message.reply_text(
+                f"Вы выбрали {len(selected_days_list)} из {days_to_select} дней: {current_selection}\n\n"
+                f"Продолжите выбор дней или нажмите 'Завершить выбор', когда закончите.",
+                reply_markup=reply_markup
+            )
+            return STATES['PREFERRED_TRAINING_DAYS']
+            
+        # Проверяем, если пользователь нажал кнопку завершения выбора
+        if text == "✅ Завершить выбор":
+            selected_days_list = context.user_data.get('selected_days_list', [])
+            
+            if not selected_days_list:
+                await update.message.reply_text(
+                    "Вы не выбрали ни одного дня недели. Пожалуйста, выберите как минимум один день:"
+                )
+                return STATES['PREFERRED_TRAINING_DAYS']
+                
+            # Преобразуем список в строку
+            selected_days_str = ",".join(selected_days_list)
+            
+            # Проверяем, соответствует ли количество выбранных дней количеству дней тренировок
+            days_to_select = int(context.user_data.get('days_to_select', 3))
+            if len(selected_days_list) != days_to_select:
+                # Спрашиваем подтверждение, если количество не совпадает
+                context.user_data['temp_selected_days'] = selected_days_str
+                
+                reply_markup = ReplyKeyboardMarkup(
+                    [['Да, продолжить с текущим выбором', 'Нет, выбрать заново']],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                await update.message.reply_text(
+                    f"Вы выбрали {len(selected_days_list)} дней, хотя указали, что хотите тренироваться {days_to_select} дней в неделю.\n\n"
+                    f"Хотите продолжить с текущим выбором ({', '.join(selected_days_list)})?\n\n"
+                    f"Если нет, вы сможете выбрать дни заново.",
+                    reply_markup=reply_markup
+                )
+                
+                # Сохраняем состояние для проверки ответа в следующем шаге
+                context.user_data['confirming_days_mismatch'] = True
+                return STATES['PREFERRED_TRAINING_DAYS']
+            
+            # Если количество соответствует
+            context.user_data['profile_data']['preferred_training_days'] = selected_days_str
+            
+            # Удаляем временные данные
+            if 'temp_selected_days' in context.user_data:
+                del context.user_data['temp_selected_days']
+            if 'confirming_days_mismatch' in context.user_data:
+                del context.user_data['confirming_days_mismatch']
+            if 'days_to_select' in context.user_data:
+                del context.user_data['days_to_select']
+            if 'selected_days_list' in context.user_data:
+                del context.user_data['selected_days_list']
+                
+            # Переходим к экрану подтверждения данных
+            return await self.show_confirmation(update, context)
+        
+        # Обработка обычного ввода через запятую
+        selected_days = [day.strip() for day in text.split(',')]
         
         # Проверяем, что все введенные дни являются валидными днями недели
         if not all(day in valid_days for day in selected_days):
@@ -799,6 +896,8 @@ class RunnerProfileConversation:
             del context.user_data['confirming_days_mismatch']
         if 'days_to_select' in context.user_data:
             del context.user_data['days_to_select']
+        if 'selected_days_list' in context.user_data:
+            del context.user_data['selected_days_list']
         
         # Переходим к экрану подтверждения данных
         return await self.show_confirmation(update, context)

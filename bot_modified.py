@@ -263,6 +263,35 @@ async def generate_plan_command(update, context):
             "❌ Произошла ошибка при генерации плана тренировок. Пожалуйста, попробуйте позже."
         )
 
+async def update_profile_command(update, context):
+    """Handler for the /update command - starts runner profile update dialog."""
+    user = update.effective_user
+    telegram_id = user.id
+    
+    # Проверяем наличие пользователя в БД
+    db_user_id = DBManager.get_user_id(telegram_id)
+    
+    if not db_user_id:
+        # Пользователь еще не зарегистрирован
+        await update.message.reply_text(
+            "Похоже, вы еще не создали профиль бегуна. Используйте команду /start, чтобы начать."
+        )
+        return
+    
+    # Отправляем сообщение об обновлении профиля
+    if hasattr(update, 'callback_query'):
+        # Если метод вызван из callback_query_handler
+        await update.callback_query.message.reply_text(
+            "Давайте обновим ваш профиль бегуна. Я задам вам несколько вопросов для сбора информации."
+        )
+    else:
+        # Если метод вызван из команды
+        await update.message.reply_text(
+            "Давайте обновим ваш профиль бегуна. Я задам вам несколько вопросов для сбора информации."
+        )
+    
+    # Конверсейшн хэндлер добавлен в setup_bot и сам обработает начало диалога
+
 async def callback_query_handler(update, context):
     """Handler for inline button callbacks."""
     query = update.callback_query
@@ -1678,40 +1707,7 @@ def setup_bot():
         
     application.add_handler(CommandHandler("cancel", cancel_command))
     
-    # Добавляем обработчик команды обновления профиля
-    async def update_profile_command(update, context):
-        """Handler for the /update command - starts runner profile update dialog."""
-        user = update.effective_user
-        telegram_id = user.id
-        
-        # Получаем id пользователя в БД
-        db_user_id = DBManager.get_user_id(telegram_id)
-        if not db_user_id:
-            await update.message.reply_text(
-                "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
-            )
-            return
-        
-        # Получаем текущий профиль бегуна
-        runner_profile = DBManager.get_runner_profile(db_user_id)
-        if not runner_profile:
-            await update.message.reply_text(
-                "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
-            )
-            return
-        
-        # Запускаем диалог обновления профиля через ConversationHandler
-        # Для этого просто отправим пользователю команду приглашения к обновлению
-        await update.message.reply_text(
-            "Запускаю процесс обновления профиля бегуна...",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        
-        # Запускаем обработчик диалога с шага INIT_UPDATE
-        conversation = RunnerProfileConversation()
-        await conversation.start_update(update, context)
-        
-        return
+    # Этот обработчик команды теперь определен вне функции setup_bot
         
     application.add_handler(CommandHandler("update", update_profile_command))
     
