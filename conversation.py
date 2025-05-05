@@ -602,8 +602,168 @@ class RunnerProfileConversation:
                 )
                 return STATES['TRAINING_START_DATE']
         
-        # Переходим к экрану подтверждения данных
+        # Спрашиваем сколько дней в неделю пользователь хочет тренироваться
+        reply_markup = ReplyKeyboardMarkup(
+            [['2', '3', '4'], ['5', '6', '7']],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
         
+        await update.message.reply_text(
+            "Сколько дней в неделю вы хотите тренироваться?",
+            reply_markup=reply_markup
+        )
+        return STATES['TRAINING_DAYS_PER_WEEK']
+    
+    async def collect_training_days_per_week(self, update: Update, context: CallbackContext):
+        """Collect and validate training days per week."""
+        text = update.message.text.strip()
+        
+        try:
+            days = int(text)
+            if days < 1 or days > 7:
+                await update.message.reply_text(
+                    "Пожалуйста, введите число от 1 до 7:"
+                )
+                return STATES['TRAINING_DAYS_PER_WEEK']
+                
+            # Сохраняем количество дней тренировок
+            context.user_data['profile_data']['training_days_per_week'] = text
+            context.user_data['days_to_select'] = days
+            
+            # Предлагаем выбрать дни недели для тренировок
+            days_of_week = [["Пн", "Вт", "Ср"], ["Чт", "Пт", "Сб", "Вс"]]
+            reply_markup = ReplyKeyboardMarkup(
+                days_of_week,
+                one_time_keyboard=False,
+                resize_keyboard=True
+            )
+            
+            await update.message.reply_text(
+                f"Выберите {days} дней недели, когда вам удобно тренироваться.\n"
+                f"Отправьте выбранные дни через запятую (например: Пн,Ср,Пт):",
+                reply_markup=reply_markup
+            )
+            return STATES['PREFERRED_TRAINING_DAYS']
+            
+        except ValueError:
+            await update.message.reply_text(
+                "Пожалуйста, введите число от 1 до 7:"
+            )
+            return STATES['TRAINING_DAYS_PER_WEEK']
+    
+    async def collect_preferred_training_days(self, update: Update, context: CallbackContext):
+        """Collect and validate preferred training days."""
+        text = update.message.text.strip()
+        
+        # Если пользователь подтверждает выбор дней, который не соответствует требуемому количеству
+        if context.user_data.get('confirming_days_mismatch'):
+            if text == 'Да, продолжить с текущим выбором':
+                # Используем временно сохраненные дни
+                selected_days = context.user_data.get('temp_selected_days', "")
+                context.user_data['profile_data']['preferred_training_days'] = selected_days
+                
+                # Очищаем временные данные
+                del context.user_data['confirming_days_mismatch']
+                del context.user_data['temp_selected_days']
+                if 'days_to_select' in context.user_data:
+                    del context.user_data['days_to_select']
+                
+                # Переходим к экрану подтверждения данных
+                return await self.show_confirmation(update, context)
+            elif text == 'Нет, выбрать заново':
+                # Возвращаемся к выбору дней
+                days_to_select = int(context.user_data.get('days_to_select', 3))
+                
+                days_of_week = [["Пн", "Вт", "Ср"], ["Чт", "Пт", "Сб", "Вс"]]
+                reply_markup = ReplyKeyboardMarkup(
+                    days_of_week,
+                    one_time_keyboard=False,
+                    resize_keyboard=True
+                )
+                
+                # Очищаем временные данные
+                del context.user_data['confirming_days_mismatch']
+                if 'temp_selected_days' in context.user_data:
+                    del context.user_data['temp_selected_days']
+                
+                await update.message.reply_text(
+                    f"Выберите {days_to_select} дней недели, когда вам удобно тренироваться.\n"
+                    f"Отправьте выбранные дни через запятую (например: Пн,Ср,Пт):",
+                    reply_markup=reply_markup
+                )
+                return STATES['PREFERRED_TRAINING_DAYS']
+            else:
+                # Неожиданный ответ, запрашиваем снова
+                reply_markup = ReplyKeyboardMarkup(
+                    [['Да, продолжить с текущим выбором', 'Нет, выбрать заново']],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                await update.message.reply_text(
+                    "Пожалуйста, выберите один из вариантов ниже:",
+                    reply_markup=reply_markup
+                )
+                return STATES['PREFERRED_TRAINING_DAYS']
+        
+        # Разбиваем текст на дни недели
+        selected_days = [day.strip() for day in text.split(',')]
+        valid_days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        
+        # Проверяем, что все введенные дни являются валидными днями недели
+        if not all(day in valid_days for day in selected_days):
+            await update.message.reply_text(
+                "Пожалуйста, выберите только допустимые дни недели (Пн, Вт, Ср, Чт, Пт, Сб, Вс) и разделите их запятыми:"
+            )
+            return STATES['PREFERRED_TRAINING_DAYS']
+        
+        # Проверяем, что нет дубликатов
+        if len(selected_days) != len(set(selected_days)):
+            await update.message.reply_text(
+                "Вы указали некоторые дни более одного раза. Пожалуйста, укажите каждый день только один раз:"
+            )
+            return STATES['PREFERRED_TRAINING_DAYS']
+        
+        # Проверяем, соответствует ли количество выбранных дней количеству дней тренировок
+        days_to_select = int(context.user_data.get('days_to_select', 3))
+        if len(selected_days) != days_to_select:
+            # Спрашиваем подтверждение, если количество не совпадает
+            context.user_data['temp_selected_days'] = text
+            
+            reply_markup = ReplyKeyboardMarkup(
+                [['Да, продолжить с текущим выбором', 'Нет, выбрать заново']],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+            
+            await update.message.reply_text(
+                f"Вы выбрали {len(selected_days)} дней, хотя указали, что хотите тренироваться {days_to_select} дней в неделю.\n\n"
+                f"Хотите продолжить с текущим выбором ({', '.join(selected_days)})?\n\n"
+                f"Если нет, вы сможете выбрать дни заново.",
+                reply_markup=reply_markup
+            )
+            
+            # Сохраняем состояние для проверки ответа в следующем шаге
+            context.user_data['confirming_days_mismatch'] = True
+            return STATES['PREFERRED_TRAINING_DAYS']
+        
+        # Если количество соответствует или пользователь подтвердил выбор
+        context.user_data['profile_data']['preferred_training_days'] = text
+        
+        # Удаляем временные данные
+        if 'temp_selected_days' in context.user_data:
+            del context.user_data['temp_selected_days']
+        if 'confirming_days_mismatch' in context.user_data:
+            del context.user_data['confirming_days_mismatch']
+        if 'days_to_select' in context.user_data:
+            del context.user_data['days_to_select']
+        
+        # Переходим к экрану подтверждения данных
+        return await self.show_confirmation(update, context)
+    
+    async def show_confirmation(self, update: Update, context: CallbackContext):
+        """Display profile summary and ask for confirmation."""
         # Display summary of collected information
         profile = context.user_data['profile_data']
         summary = (
@@ -623,7 +783,9 @@ class RunnerProfileConversation:
             
         summary += (
             f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
-            f"📊 Еженедельный объем: {profile['weekly_volume_text']} км\n\n"
+            f"📊 Еженедельный объем: {profile['weekly_volume_text']} км\n"
+            f"🗓️ Количество тренировок в неделю: {profile['training_days_per_week']}\n"
+            f"📆 Предпочитаемые дни тренировок: {profile['preferred_training_days']}\n\n"
             "Эта информация верна?"
         )
         
