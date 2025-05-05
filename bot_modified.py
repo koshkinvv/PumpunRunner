@@ -1784,6 +1784,57 @@ async def handle_photo(update, context):
         )
 
 
+async def start_command(update, context):
+    """Обработчик команды /start - начало взаимодействия с ботом."""
+    user = update.effective_user
+    telegram_id = user.id
+    username = user.username
+    first_name = user.first_name
+    last_name = user.last_name
+    
+    # Добавляем пользователя в базу, если его там нет
+    db_user_id = DBManager.add_user(telegram_id, username, first_name, last_name)
+    
+    # Получаем профиль пользователя
+    profile = DBManager.get_runner_profile(db_user_id)
+    
+    # Формируем приветственное сообщение
+    welcome_message = (
+        f"👋 Привет, {first_name}!\n\n"
+        "Я твой персональный помощник для подготовки к соревнованиям по бегу. "
+        "Я могу создать индивидуальный план тренировок, помогу отслеживать прогресс "
+        "и буду мотивировать тебя достичь твоей цели.\n\n"
+    )
+    
+    if profile:
+        # Если профиль пользователя существует, предлагаем посмотреть текущий план
+        buttons = [
+            [KeyboardButton("👁️ Посмотреть текущий план")],
+            [KeyboardButton("🆕 Создать новый план")],
+            [KeyboardButton("✏️ Обновить мой профиль")]
+        ]
+        
+        welcome_message += (
+            "🔹 Используй кнопки ниже для работы с текущим планом или создания нового.\n"
+            "🔹 Отправь мне скриншот из приложения для бега (Nike Run Club, Strava, Garmin), "
+            "и я автоматически отмечу тренировку как выполненную.\n"
+            "🔹 Используй команду /help, чтобы увидеть все доступные команды."
+        )
+    else:
+        # Если профиля нет, предлагаем создать профиль
+        buttons = [
+            [KeyboardButton("🏃‍♂️ Создать беговой профиль")]
+        ]
+        
+        welcome_message += (
+            "Для начала нам нужно создать твой беговой профиль. "
+            "Нажми кнопку ниже, чтобы начать."
+        )
+    
+    # Создаем клавиатуру и отправляем сообщение
+    reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+
 def setup_bot():
     """Configure and return the bot application."""
     # Create the Application object
@@ -1793,6 +1844,7 @@ def setup_bot():
     create_tables()
     
     # Add command handlers
+    application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CommandHandler("pending", pending_trainings_command))
