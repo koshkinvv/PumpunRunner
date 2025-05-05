@@ -120,7 +120,6 @@ class DBManager:
                         fitness_level = %(fitness_level)s,
                         weekly_volume = %(weekly_volume)s,
                         training_start_date = %(training_start_date)s,
-                        timezone = %(timezone)s,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = %(user_id)s
                     """
@@ -131,11 +130,11 @@ class DBManager:
                     INSERT INTO runner_profiles (
                         user_id, distance, competition_date, gender, age, 
                         height, weight, experience, goal, target_time, 
-                        fitness_level, weekly_volume, training_start_date, timezone
+                        fitness_level, weekly_volume, training_start_date
                     ) VALUES (
                         %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
                         %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
-                        %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s, %(timezone)s
+                        %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s
                     )
                     """
                     cursor.execute(query, {**profile_data, "user_id": user_id})
@@ -316,8 +315,7 @@ class DBManager:
                     "target_time": "00:45:00",
                     "fitness_level": "Средний",
                     "weekly_volume": "15",
-                    "training_start_date": datetime.now().strftime("%Y-%m-%d"),
-                    "timezone": "Europe/Moscow"  # Москва как часовой пояс по умолчанию
+                    "training_start_date": datetime.now().strftime("%Y-%m-%d")
                 }
                 
                 # Вставляем профиль
@@ -325,11 +323,11 @@ class DBManager:
                 INSERT INTO runner_profiles (
                     user_id, distance, competition_date, gender, age, 
                     height, weight, experience, goal, target_time, 
-                    fitness_level, weekly_volume, training_start_date, timezone
+                    fitness_level, weekly_volume, training_start_date
                 ) VALUES (
                     %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
                     %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
-                    %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s, %(timezone)s
+                    %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s
                 ) RETURNING *
                 """
                 cursor.execute(query, {**default_profile, "user_id": user_id})

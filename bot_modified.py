@@ -1,16 +1,11 @@
 import os
 import json
 import io
-import traceback
-import logging
 from datetime import datetime, timedelta
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, 
-    MessageHandler, filters, TypeHandler
-)
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ConversationHandler, MessageHandler, filters
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import TELEGRAM_TOKEN, logging, STATES
+from config import TELEGRAM_TOKEN, logging
 from models import create_tables
 from db_manager import DBManager
 from training_plan_manager import TrainingPlanManager
@@ -39,40 +34,6 @@ def format_weekly_volume(volume, default_value="0"):
     
     # Иначе добавляем единицу измерения
     return f"{volume} км/неделю"
-
-def format_training_plan_message(plan):
-    """
-    Форматирует план тренировок для отображения пользователю.
-    
-    Args:
-        plan: Словарь с данными плана тренировок
-        
-    Returns:
-        Отформатированная строка с планом тренировок
-    """
-    if not plan or 'plan_data' not in plan:
-        return "Ошибка: план тренировок не найден или имеет неверный формат."
-    
-    plan_data = plan.get('plan_data', {})
-    plan_name = plan_data.get('plan_name', 'План тренировок')
-    plan_description = plan_data.get('plan_description', 'Нет описания')
-    training_days = plan_data.get('training_days', [])
-    
-    if not training_days:
-        return f"*{plan_name}*\n\n{plan_description}\n\nНет тренировок в плане."
-    
-    # Формируем заголовок и описание плана
-    message = f"*{plan_name}*\n\n{plan_description}\n\n"
-    
-    # Добавляем информацию о каждом дне тренировки
-    for i, day in enumerate(training_days):
-        message += f"*День {i+1}: {day.get('day', 'День недели')} ({day.get('date', 'Дата')})*\n"
-        message += f"Тип: {day.get('training_type', 'Не указан')}\n"
-        message += f"Дистанция: {day.get('distance', 'Не указана')}\n"
-        message += f"Темп: {day.get('pace', 'Не указан')}\n"
-        message += f"Описание: {day.get('description', 'Нет описания')}\n\n"
-    
-    return message
 
 async def help_command(update, context):
     """Handler for the /help command."""
@@ -447,28 +408,6 @@ async def callback_query_handler(update, context):
                 # Проверка, все ли тренировки выполнены или отменены
                 has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
                 
-                # Предлагаем скорректировать план, если это не последняя тренировка
-                if has_pending_trainings:
-                    # Получаем профиль бегуна для возможной корректировки плана
-                    runner_profile = DBManager.get_runner_profile(db_user_id)
-                    if runner_profile:
-                        # Создаем кнопки для корректировки плана или продолжения без изменений
-                        # Используем единый формат для всех кнопок корректировки плана
-                        adjust_callback = f"adjust_plan_{plan_id}_{day_number}_0_0"  # Используем тот же формат, что и везде, с нулями вместо расстояний
-                        logging.info(f"Создаем кнопку с callback_data: {adjust_callback}")
-                        
-                        keyboard = InlineKeyboardMarkup([
-                            [InlineKeyboardButton("📋 Скорректировать план", callback_data=adjust_callback)],
-                            [InlineKeyboardButton("✅ Продолжить без изменений", callback_data="no_adjustment")]
-                        ])
-                        
-                        # Отправляем сообщение с предложением скорректировать план
-                        await query.message.reply_text(
-                            f"❓ Хотите скорректировать оставшиеся тренировки после отмены тренировки дня {day_number}?\n\n"
-                            f"Это поможет перераспределить нагрузку и сохранить баланс в вашем тренировочном плане.",
-                            reply_markup=keyboard
-                        )
-                    
                 # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
                 if not has_pending_trainings:
                     # Расчет общего пройденного расстояния
@@ -525,30 +464,13 @@ async def callback_query_handler(update, context):
             # Отправляем каждый день тренировки с соответствующими кнопками
             # Проверяем структуру данных плана и выбираем правильное поле
             training_days = []
-            
-            # Подробное логирование для отладки
-            logging.info(f"План для пользователя: {db_user_id}, ID плана: {plan.get('id', 'Нет ID')}")
-            logging.info(f"Ключи в плане: {list(plan.keys())}")
-            
             if 'training_days' in plan:
-                logging.info("Найдены дни тренировок в корне плана")
                 training_days = plan['training_days']
-            elif 'plan_data' in plan:
-                logging.info(f"Найдено поле plan_data, тип: {type(plan['plan_data'])}")
-                if isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
-                    logging.info("Найдены дни тренировок в plan_data")
-                    training_days = plan['plan_data']['training_days']
-                elif isinstance(plan['plan_data'], str):
-                    # Если plan_data - это строка JSON, пробуем распарсить
-                    try:
-                        plan_data_json = json.loads(plan['plan_data'])
-                        if 'training_days' in plan_data_json:
-                            logging.info("Найдены дни тренировок после парсинга JSON")
-                            training_days = plan_data_json['training_days']
-                    except:
-                        logging.error("Не удалось распарсить plan_data как JSON")
+            elif 'plan_data' in plan and isinstance(plan['plan_data'], dict) and 'training_days' in plan['plan_data']:
+                training_days = plan['plan_data']['training_days']
             
-            logging.info(f"Найдено дней тренировок: {len(training_days) if training_days else 0}")
+            logging.info(f"План для пользователя: {db_user_id}, структура: {plan.keys()}")
+            logging.info(f"Найдено дней тренировок: {len(training_days)}")
             
             for idx, day in enumerate(training_days):
                 training_day_num = idx + 1
@@ -627,7 +549,7 @@ async def callback_query_handler(update, context):
                 with open("attached_assets/котик.jpeg", "rb") as photo:
                     await query.message.reply_photo(
                         photo=photo,
-                        caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\ Твой котик всегда готов к любой задаче! 🐱💪"
+                        caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
                     )
                 
                 # Получаем сервис OpenAI и генерируем план
@@ -1114,213 +1036,107 @@ async def callback_query_handler(update, context):
             "Продолжайте следовать своему регулярному плану тренировок!"
         )
     
-    # Обработка кнопки подтверждения обновления профиля
-    elif query.data == "confirm_update_profile":
-        try:
-            # Получаем данные пользователя
-            telegram_id = update.effective_user.id
-            db_user_id = DBManager.get_user_id(telegram_id)
-            
-            if not db_user_id:
-                await query.message.edit_text("❌ Ошибка: пользователь не найден в базе данных.")
-                return
-                
-            # Удаляем текущий профиль пользователя
-            # Здесь используем низкоуровневое подключение, так как DBManager не имеет метода удаления профиля
-            connection = DBManager.get_connection()
-            cursor = connection.cursor()
-            
-            try:
-                cursor.execute("DELETE FROM runner_profiles WHERE user_id = %s", (db_user_id,))
-                connection.commit()
-                
-                # Запускаем процесс создания нового профиля
-                # Инициализируем класс RunnerProfileConversation
-                conversation = RunnerProfileConversation()
-                
-                # Строим клавиатуру для выбора дистанции
-                reply_markup = ReplyKeyboardMarkup(
-                    [['5', '10'], ['21', '42']], 
-                    one_time_keyboard=True,
-                    resize_keyboard=True
-                )
-                
-                # Отправляем сообщение о начале процесса обновления профиля
-                await query.message.edit_text(
-                    "✅ Ваш прежний профиль успешно удален. "
-                    "Сейчас я проведу вас через процесс создания нового профиля."
-                )
-                
-                await query.message.reply_text(
-                    "Какую дистанцию бега вы планируете пробежать (в километрах)?",
-                    reply_markup=reply_markup
-                )
-                
-                # Запускаем соответствующее состояние разговора через контекст пользователя
-                # Для этого добавим данные в user_data
-                context.user_data['db_user_id'] = db_user_id
-                context.user_data['profile_data'] = {}
-                
-                # Переходим в состояние DISTANCE разговора
-                context.user_data['conversation_state'] = STATES['DISTANCE']
-                
-            except Exception as e:
-                connection.rollback()
-                logging.error(f"Ошибка при удалении профиля: {e}")
-                await query.message.edit_text(
-                    "❌ Произошла ошибка при обновлении профиля. Пожалуйста, попробуйте позже."
-                )
-            finally:
-                cursor.close()
-                connection.close()
-                
-        except Exception as e:
-            logging.error(f"Ошибка при обработке подтверждения обновления профиля: {e}")
-            await query.message.edit_text(
-                "❌ Произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже."
-            )
-    
-    # Обработка кнопки отмены обновления профиля
-    elif query.data == "cancel_update_profile":
-        await query.message.edit_text(
-            "✅ Обновление профиля отменено. Ваш текущий профиль остается без изменений."
-        )
-        
-    # Обработка кнопки "adjust" - корректировка плана после отмены (устаревшая версия)
-    elif query.data.startswith('adjust_') and not query.data.startswith('adjust_plan_'):
-        try:
-            # Этот обработчик больше не используется - все запросы перенаправляются на adjust_plan_
-            logging.warning(f"【ОТЛАДКА】 Обнаружен устаревший формат adjust_. Callback: {query.data}")
-            
-            # Отправляем уведомление пользователю
-            await query.message.reply_text(
-                "⚠️ Обнаружен устаревший формат запроса на корректировку плана. "
-                "Пожалуйста, используйте обновленный интерфейс для корректировки плана.\n"
-                "Рекомендуется повторить последнее действие."
-            )
-                
-        except Exception as e:
-            logging.error(f"Error adjusting plan after cancellation (new format): {e}")
-            await query.message.reply_text("❌ Произошла ошибка при корректировке плана тренировок.")
-                
-    # Обработка кнопки "adjust_after_cancel" - корректировка плана после отмены (устаревшая версия)
-    elif query.data.startswith('adjust_after_cancel_'):
-        try:
-            # Этот обработчик больше не используется - все запросы перенаправляются на adjust_plan_
-            logging.warning(f"【ОТЛАДКА】 Обнаружен устаревший формат adjust_after_cancel_. Callback: {query.data}")
-            
-            # Отправляем уведомление пользователю
-            await query.message.reply_text(
-                "⚠️ Обнаружен устаревший формат запроса на корректировку плана. "
-                "Пожалуйста, используйте обновленный интерфейс для корректировки плана.\n"
-                "Рекомендуется повторить последнее действие через меню /pending или /help."
-            )
-                
-        except Exception as e:
-            logging.error(f"Error adjusting plan after cancellation: {e}")
-            await query.message.reply_text("❌ Произошла ошибка при корректировке плана тренировок.")
-            
-    # Обработка кнопки "no_adjustment" - продолжить без корректировки
-    elif query.data == "no_adjustment":
-        try:
-            await query.message.reply_text("✅ Вы решили продолжить без корректировки плана.")
-        except Exception as e:
-            logging.error(f"Error handling no_adjustment: {e}")
-            await query.message.reply_text("❌ Произошла ошибка при обработке запроса.")
-    
     # Обработка кнопки корректировки плана
     elif query.data.startswith("adjust_plan_"):
         try:
-            logging.info(f"===== НАЖАТА КНОПКА КОРРЕКТИРОВКИ ПЛАНА =====")
-            logging.info(f"Пользователь: {update.effective_user.username} (ID: {update.effective_user.id})")
-            logging.info(f"Callback data: {query.data}")
-            
-            # Извлекаем параметры из callback_data
-            # Формат: adjust_plan_PLAN_ID_DAY_NUMBER_ACTUAL_DISTANCE_PLANNED_DISTANCE
+            # Разбираем callback data: adjust_plan_{plan_id}_{day_num}_{actual_distance}_{planned_distance}
             parts = query.data.split('_')
             
+            # Проверяем, правильный ли формат
             if len(parts) < 6:
-                await query.message.reply_text("❌ Некорректный формат данных для корректировки плана.")
-                return
-                
-            try:
-                plan_id = int(parts[2])
-                day_number = int(parts[3])
-                actual_distance = float(parts[4])
-                planned_distance = float(parts[5])
-                
-                logging.info(f"Извлеченные параметры: plan_id={plan_id}, day_number={day_number}, actual_distance={actual_distance}, planned_distance={planned_distance}")
-            except (ValueError, IndexError) as e:
-                logging.error(f"Ошибка при обработке параметров callback: {e}")
-                await query.message.reply_text("❌ Некорректные данные в запросе корректировки плана.")
+                await query.message.reply_text("❌ Неверный формат callback_data для корректировки плана.")
                 return
             
+            # Извлекаем параметры
+            plan_id = int(parts[2])
+            day_num = int(parts[3])
+            actual_distance = float(parts[4])
+            planned_distance = float(parts[5])
+            
             # Получаем профиль бегуна
-            profile = DBManager.get_runner_profile(db_user_id)
-            if not profile:
-                await query.message.reply_text("❌ Не удалось найти профиль бегуна.")
+            runner_profile = DBManager.get_runner_profile(db_user_id)
+            if not runner_profile:
+                await query.message.reply_text("❌ Не удалось получить профиль бегуна.")
                 return
-                
-            # Получаем план тренировок
-            plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
-            if not plan or plan['id'] != plan_id:
+            
+            # Получаем текущий план
+            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            if not current_plan or current_plan['id'] != plan_id:
                 await query.message.reply_text("❌ Не удалось найти указанный план тренировок.")
                 return
             
             # Отправляем сообщение о начале корректировки
-            processing_message = await query.message.reply_text(
-                "⏳ Разрабатываем скорректированный план тренировок...\n"
-                "Это может занять некоторое время, пожалуйста, подождите."
+            await query.message.reply_text(
+                "🔄 Корректирую ваш план тренировок с учетом фактического выполнения...\n"
+                "Это может занять некоторое время."
             )
             
-            # Расчет разницы между запланированной и фактической дистанциями
-            diff_percent = ((actual_distance - planned_distance) / planned_distance) * 100
-            logging.info(f"Разница между фактической и плановой дистанцией: {diff_percent:.1f}%")
-            
-            # Корректируем план с помощью OpenAI
+            # Создаем инстанс OpenAI сервиса и корректируем план
             openai_service = OpenAIService()
-            adjusted_plan = openai_service.adjust_plan_after_difference(
-                profile, 
-                plan['plan_data'], 
-                day_number,
-                actual_distance,
+            adjusted_plan = openai_service.adjust_training_plan(
+                runner_profile,
+                current_plan['plan_data'],
+                day_num,
                 planned_distance,
-                diff_percent
+                actual_distance
             )
             
             if not adjusted_plan:
-                await processing_message.edit_text("❌ Не удалось скорректировать план тренировок.")
+                await query.message.reply_text("❌ Не удалось скорректировать план. Пожалуйста, попробуйте позже.")
                 return
-                
+            
             # Обновляем план в базе данных
-            success = TrainingPlanManager.update_training_plan(
-                db_user_id, 
-                plan_id, 
-                adjusted_plan
+            success = TrainingPlanManager.update_training_plan(db_user_id, plan_id, adjusted_plan)
+            
+            if not success:
+                await query.message.reply_text("❌ Не удалось сохранить скорректированный план.")
+                return
+            
+            # Получаем обновленный план
+            updated_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            
+            # Отправляем информацию о скорректированном плане
+            await query.message.reply_text(
+                f"✅ Ваш план тренировок успешно скорректирован!\n\n"
+                f"*{updated_plan['plan_data']['plan_name']}*\n\n"
+                f"{updated_plan['plan_data']['plan_description']}\n\n"
+                f"📋 Вот оставшиеся дни вашего скорректированного плана:",
+                parse_mode='Markdown'
             )
             
-            if success:
-                await processing_message.edit_text(
-                    "✅ План тренировок успешно скорректирован!\n\n"
-                    f"Оставшиеся тренировки были адаптированы с учетом вашего фактического выполнения "
-                    f"({actual_distance} км вместо запланированных {planned_distance} км)."
+            # Получаем обработанные тренировки
+            completed = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+            canceled = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+            
+            # Отправляем только оставшиеся (не выполненные и не отмененные) дни тренировок
+            for idx, day in enumerate(updated_plan['plan_data']['training_days']):
+                training_day_num = idx + 1
+                
+                # Пропускаем уже обработанные дни
+                if training_day_num in completed or training_day_num in canceled:
+                    continue
+                
+                # Создаем сообщение с днем тренировки
+                training_type = day.get('training_type') or day.get('type', 'Не указан')
+                
+                day_message = (
+                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+                    f"Тип: {training_type}\n"
+                    f"Дистанция: {day['distance']}\n"
+                    f"Темп: {day['pace']}\n\n"
+                    f"{day['description']}"
                 )
                 
-                # Отправляем обновленный план
+                # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👁 Посмотреть обновленный план", callback_data="view_plan")]
+                    [InlineKeyboardButton("✅ Отметить как выполненное", callback_data=f"complete_{plan_id}_{training_day_num}")],
+                    [InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{plan_id}_{training_day_num}")]
                 ])
                 
-                await query.message.reply_text(
-                    "📋 Ваш план тренировок был скорректирован. Вы можете посмотреть обновленные тренировки:",
-                    reply_markup=keyboard
-                )
-            else:
-                await processing_message.edit_text("❌ Не удалось обновить план тренировок в базе данных.")
-                
+                await query.message.reply_text(day_message, parse_mode='Markdown', reply_markup=keyboard)
+            
         except Exception as e:
             logging.error(f"Error adjusting plan: {e}")
-            logging.error(traceback.format_exc())
             await query.message.reply_text("❌ Произошла ошибка при корректировке плана.")
     
     # Обработка кнопки "Продолжить тренировки"
@@ -1690,15 +1506,9 @@ async def handle_photo(update, context):
                     actual_distance = 0
                 
                 diff_percent = 0
-                if planned_distance > 0 and actual_distance >= 0:
-                    # Обычный случай - рассчитываем процентную разницу
+                if planned_distance > 0 and actual_distance > 0:
                     diff_percent = abs(actual_distance - planned_distance) / planned_distance * 100
                     logging.info(f"Вычислена разница между фактической ({actual_distance} км) и плановой ({planned_distance} км) дистанцией: {diff_percent:.2f}%")
-                elif planned_distance == 0 and actual_distance > 0:
-                    # Особый случай - день отдыха (0 км), но пользователь всё равно бегал
-                    # Устанавливаем разницу 100%, чтобы сработало условие корректировки плана
-                    diff_percent = 100.0
-                    logging.info(f"Особый случай: плановая дистанция 0 км, но фактическая {actual_distance} км. Устанавливаем diff_percent = 100%")
                 
                 # Create the acknowledgment message
                 training_completion_msg = (
@@ -1724,12 +1534,7 @@ async def handle_photo(update, context):
                 
                 if diff_percent > 20 and training_days:
                     # Add a message about the significant difference
-                    if planned_distance == 0 and actual_distance > 0:
-                        training_completion_msg += (
-                            f"⚠️ Вы бегали {actual_distance} км в день, запланированный как отдых (0 км)!\n"
-                            f"Это может повлиять на ваше восстановление и общую эффективность тренировок.\n\n"
-                        )
-                    elif actual_distance > planned_distance:
+                    if actual_distance > planned_distance:
                         training_completion_msg += (
                             f"⚠️ Ваша фактическая дистанция на {diff_percent:.1f}% больше запланированной!\n"
                             f"Это может указывать на то, что ваш текущий план недостаточно интенсивен для вас.\n\n"
@@ -1822,83 +1627,6 @@ async def handle_photo(update, context):
         )
 
 
-async def start_command(update, context):
-    """Обработчик команды /start - начало взаимодействия с ботом."""
-    user = update.effective_user
-    telegram_id = user.id
-    username = user.username
-    first_name = user.first_name
-    last_name = user.last_name
-    
-    # Добавляем пользователя в базу, если его там нет
-    db_user_id = DBManager.add_user(telegram_id, username, first_name, last_name)
-    
-    # Получаем профиль пользователя
-    profile = DBManager.get_runner_profile(db_user_id)
-    
-    # Формируем приветственное сообщение
-    welcome_message = (
-        f"👋 Привет, {first_name}!\n\n"
-        "Я твой персональный помощник для подготовки к соревнованиям по бегу. "
-        "Я могу создать индивидуальный план тренировок, помогу отслеживать прогресс "
-        "и буду мотивировать тебя достичь твоей цели.\n\n"
-    )
-    
-    if profile:
-        # Если профиль пользователя существует, предлагаем посмотреть текущий план
-        buttons = [
-            ["👁️ Посмотреть текущий план"],
-            ["🆕 Создать новый план"],
-            ["✏️ Обновить мой профиль"]
-        ]
-        
-        welcome_message += (
-            "🔹 Используй кнопки ниже для работы с текущим планом или создания нового.\n"
-            "🔹 Отправь мне скриншот из приложения для бега (Nike Run Club, Strava, Garmin), "
-            "и я автоматически отмечу тренировку как выполненную.\n"
-            "🔹 Используй команду /help, чтобы увидеть все доступные команды."
-        )
-    else:
-        # Если профиля нет, предлагаем создать профиль
-        buttons = [
-            ["🏃‍♂️ Создать беговой профиль"]
-        ]
-        
-        welcome_message += (
-            "Для начала нам нужно создать твой беговой профиль. "
-            "Нажми кнопку ниже, чтобы начать."
-        )
-    
-    # Создаем клавиатуру и отправляем сообщение
-    reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
-
-async def log_update(update, context):
-    """Логирует все входящие обновления от Telegram."""
-    try:
-        user = update.effective_user
-        if user:
-            logging.info(f"Получено обновление от пользователя {user.id} (@{user.username}) - {user.first_name} {user.last_name}")
-        
-        # Логируем тип обновления
-        if update.message:
-            if update.message.text:
-                logging.info(f"Текстовое сообщение: {update.message.text}")
-            elif update.message.photo:
-                logging.info(f"Получена фотография")
-            else:
-                logging.info(f"Другой тип сообщения: {update.message}")
-        elif update.callback_query:
-            logging.info(f"Callback запрос: {update.callback_query.data}")
-        else:
-            logging.info(f"Другой тип обновления: {update}")
-        
-        # Передаем обновление дальше в цепочку обработчиков
-        return False
-    except Exception as e:
-        logging.error(f"Ошибка в логировании обновления: {e}")
-        return False
-
 def setup_bot():
     """Configure and return the bot application."""
     # Create the Application object
@@ -1907,11 +1635,7 @@ def setup_bot():
     # Create database tables if they don't exist
     create_tables()
     
-    # Добавляем логирование всех входящих обновлений перед любыми обработчиками
-    application.add_handler(TypeHandler(Update, log_update), group=-1)  # Группа -1 выполняется первой
-    
     # Add command handlers
-    application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CommandHandler("pending", pending_trainings_command))
@@ -2148,20 +1872,10 @@ def setup_bot():
                 )
                 
         elif text == "✏️ Обновить мой профиль":
-            # Выводим предупреждение и предлагаем подтвердить обновление профиля
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Да, обновить профиль", callback_data="confirm_update_profile")],
-                [InlineKeyboardButton("❌ Нет, оставить текущий", callback_data="cancel_update_profile")]
-            ])
-            
+            # Начинаем диалог обновления профиля
             await update.message.reply_text(
-                "⚠️ *Внимание!* Вы собираетесь обновить свой беговой профиль.\n\n"
-                "Все текущие данные будут удалены, и вам нужно будет заново указать "
-                "дистанцию, дату соревнований, возраст, рост, вес и другие параметры.\n\n"
-                "Ваш текущий план тренировок останется без изменений.\n\n"
-                "Вы уверены, что хотите продолжить?",
-                parse_mode='Markdown',
-                reply_markup=keyboard
+                "Для обновления профиля используйте команду /start. "
+                "Обратите внимание, что это перезапишет ваши текущие данные."
             )
     
     # Регистрируем обработчик текстовых сообщений

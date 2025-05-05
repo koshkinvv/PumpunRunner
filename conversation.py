@@ -1,5 +1,4 @@
 import re
-import pytz
 from datetime import datetime
 
 # Импорты из python-telegram-bot
@@ -603,78 +602,6 @@ class RunnerProfileConversation:
                 )
                 return STATES['TRAINING_START_DATE']
         
-        # Переходим к выбору часового пояса
-        reply_markup = ReplyKeyboardMarkup(
-            [
-                ['Москва, Санкт-Петербург (Europe/Moscow)'],
-                ['Калининград (Europe/Kaliningrad)'],
-                ['Самара (Europe/Samara)'],
-                ['Екатеринбург (Asia/Yekaterinburg)'],
-                ['Омск (Asia/Omsk)'],
-                ['Красноярск (Asia/Krasnoyarsk)'],
-                ['Иркутск (Asia/Irkutsk)'],
-                ['Якутск (Asia/Yakutsk)'],
-                ['Владивосток (Asia/Vladivostok)'],
-                ['Магадан (Asia/Magadan)'],
-                ['Камчатка (Asia/Kamchatka)']
-            ],
-            one_time_keyboard=True,
-            resize_keyboard=True
-        )
-        
-        await update.message.reply_text(
-            "В каком часовом поясе вы находитесь? Это нужно для отправки напоминаний о тренировках "
-            "в 20:00 по вашему местному времени.",
-            reply_markup=reply_markup
-        )
-        return STATES['TIMEZONE']
-    
-    async def collect_timezone(self, update: Update, context: CallbackContext):
-        """Collect and validate user timezone."""
-        text = update.message.text.strip()
-        
-        # Извлекаем часовой пояс из выбранного города
-        timezone_pattern = r'.*\((.*)\)$'
-        match = re.search(timezone_pattern, text)
-        
-        if match:
-            # Нашли часовой пояс в скобках
-            timezone = match.group(1)
-        else:
-            # Пробуем использовать введенный текст как часовой пояс
-            timezone = text
-        
-        # Проверка валидности часового пояса
-        try:
-            pytz.timezone(timezone)
-            # Часовой пояс валидный, сохраняем его
-            context.user_data['profile_data']['timezone'] = timezone
-        except pytz.exceptions.UnknownTimeZoneError:
-            # Часовой пояс не валидный, предлагаем выбрать из списка
-            reply_markup = ReplyKeyboardMarkup(
-                [
-                    ['Москва, Санкт-Петербург (Europe/Moscow)'],
-                    ['Калининград (Europe/Kaliningrad)'],
-                    ['Самара (Europe/Samara)'],
-                    ['Екатеринбург (Asia/Yekaterinburg)'],
-                    ['Омск (Asia/Omsk)'],
-                    ['Красноярск (Asia/Krasnoyarsk)'],
-                    ['Иркутск (Asia/Irkutsk)'],
-                    ['Якутск (Asia/Yakutsk)'],
-                    ['Владивосток (Asia/Vladivostok)'],
-                    ['Магадан (Asia/Magadan)'],
-                    ['Камчатка (Asia/Kamchatka)']
-                ],
-                one_time_keyboard=True,
-                resize_keyboard=True
-            )
-            
-            await update.message.reply_text(
-                "Пожалуйста, выберите часовой пояс из предложенных вариантов.",
-                reply_markup=reply_markup
-            )
-            return STATES['TIMEZONE']
-        
         # Переходим к экрану подтверждения данных
         
         # Display summary of collected information
@@ -689,7 +616,6 @@ class RunnerProfileConversation:
             f"⚖️ Вес: {profile['weight']} кг\n"
             f"🎯 Цель: {profile['goal']}\n"
             f"📆 Дата начала тренировок: {profile.get('training_start_date_text', 'Не указана')}\n"
-            f"🕓 Часовой пояс: {profile['timezone']}\n"
         )
         
         if profile['goal'] == 'Улучшить время':
@@ -800,7 +726,6 @@ class RunnerProfileConversation:
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
-                STATES['TIMEZONE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_timezone)],
                 STATES['CONFIRMATION']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_data)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)],

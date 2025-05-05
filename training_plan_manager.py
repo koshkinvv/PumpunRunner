@@ -420,56 +420,6 @@ class TrainingPlanManager:
                 conn.close()
                 
     @staticmethod
-    def calculate_total_completed_distance(user_id, plan_id):
-        """
-        Рассчитывает общее расстояние, пройденное в выполненных тренировках плана.
-        
-        Args:
-            user_id: ID пользователя в базе данных
-            plan_id: ID плана тренировок
-            
-        Returns:
-            Общее расстояние в километрах (float)
-        """
-        conn = None
-        try:
-            # Получаем план тренировок
-            plan = TrainingPlanManager.get_training_plan(user_id, plan_id)
-            if not plan or 'plan_data' not in plan or not plan['plan_data']:
-                return 0.0
-                
-            # Получаем данные плана
-            plan_data = plan['plan_data']
-            if 'training_days' not in plan_data:
-                return 0.0
-                
-            # Получаем список дней тренировок
-            training_days = plan_data['training_days']
-            
-            # Получаем список выполненных тренировок
-            completed_days = TrainingPlanManager.get_completed_trainings(user_id, plan_id)
-            
-            # Суммируем расстояния выполненных тренировок
-            total_distance = 0.0
-            for day_num in completed_days:
-                if day_num <= len(training_days):
-                    training = training_days[day_num - 1]
-                    distance_str = training.get('distance', '0 км')
-                    
-                    # Извлекаем числовое значение из строки
-                    try:
-                        # Убираем единицы измерения и пробелы
-                        distance_value = float(distance_str.replace('км', '').strip())
-                        total_distance += distance_value
-                    except:
-                        logging.error(f"Не удалось преобразовать дистанцию '{distance_str}' в число")
-            
-            return total_distance
-        except Exception as e:
-            logging.error(f"Ошибка при расчете общего пройденного расстояния: {e}")
-            return 0.0
-    
-    @staticmethod
     def get_canceled_trainings(user_id, plan_id):
         """
         Get a list of canceled training days for a plan.
@@ -505,48 +455,6 @@ class TrainingPlanManager:
             if conn:
                 conn.close()
                 
-    @staticmethod
-    def get_active_training_plans():
-        """
-        Get all active training plans for all users.
-        
-        Returns:
-            List of dictionaries containing the active training plans with user IDs
-        """
-        conn = None
-        try:
-            conn = TrainingPlanManager.get_connection()
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-                # Query all active plans
-                cursor.execute(
-                    """
-                    SELECT tp.id, tp.user_id, tp.plan_name, tp.plan_description, tp.plan_data, tp.created_at,
-                           u.telegram_id, u.username, u.first_name, u.last_name, rp.timezone
-                    FROM training_plans tp
-                    JOIN users u ON tp.user_id = u.id
-                    LEFT JOIN runner_profiles rp ON u.id = rp.user_id
-                    WHERE tp.is_active = TRUE
-                    ORDER BY tp.created_at DESC
-                    """
-                )
-                
-                plans = cursor.fetchall()
-                results = []
-                for plan in plans:
-                    plan_dict = dict(plan)
-                    # Parse JSON data only if it's still a string
-                    if isinstance(plan_dict["plan_data"], str):
-                        plan_dict["plan_data"] = json.loads(plan_dict["plan_data"])
-                    results.append(plan_dict)
-                return results
-                
-        except Exception as e:
-            logging.error(f"Error getting active training plans: {e}")
-            return []
-        finally:
-            if conn:
-                conn.close()
-    
     @staticmethod
     def get_all_processed_trainings(user_id, plan_id):
         """

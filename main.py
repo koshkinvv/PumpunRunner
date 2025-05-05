@@ -1,3 +1,4 @@
+
 import logging
 import sys
 import time
@@ -7,13 +8,8 @@ import signal
 import psutil
 import fcntl
 import datetime
-import threading
-from dotenv import load_dotenv
 from bot_modified import setup_bot
 from app import app  # Импортируем Flask-приложение из app.py
-
-# Загружаем переменные окружения из .env файла
-load_dotenv()
 
 # Константы для мониторинга здоровья
 HEALTH_CHECK_FILE = "bot_health.txt"
@@ -21,193 +17,38 @@ LOCK_FILE = "/tmp/telegram_bot.lock"
 BOT_PROCESS_NAME = "main.py"
 
 # Настройка логирования в файл и консоль
-def setup_memory_monitoring():
-    """Настраивает мониторинг памяти для выявления утечек."""
-    memory_stats = {
-        'last_check': time.time(),
-        'last_rss': 0,
-        'check_interval': 300,  # 5 минут между проверками
-        'warning_threshold': 20  # 20% рост - порог для предупреждения
-    }
-
-    # Получаем начальное состояние памяти
-    try:
-        process = psutil.Process(os.getpid())
-        memory_stats['last_rss'] = process.memory_info().rss
-    except Exception as e:
-        logging.error(f"Не удалось получить начальное состояние памяти: {e}")
-
-    def check_memory_usage():
-        """Периодически проверяет использование памяти для выявления утечек."""
-        while True:
-            try:
-                current_time = time.time()
-                # Проверяем каждые 5 минут
-                if current_time - memory_stats['last_check'] >= memory_stats['check_interval']:
-                    process = psutil.Process(os.getpid())
-                    current_rss = process.memory_info().rss
-
-                    # Вычисляем процент роста
-                    if memory_stats['last_rss'] > 0:
-                        percentage_increase = (current_rss - memory_stats['last_rss']) / memory_stats['last_rss'] * 100
-
-                        # Если рост больше порога, логируем предупреждение
-                        if percentage_increase > memory_stats['warning_threshold']:
-                            logging.warning(f"Обнаружен существенный рост использования памяти: {percentage_increase:.1f}% "
-                                          f"(с {memory_stats['last_rss']/(1024*1024):.1f}MB до {current_rss/(1024*1024):.1f}MB)")
-
-                            # Получаем информацию о потоках
-                            thread_count = threading.active_count()
-                            logging.info(f"Активных потоков: {thread_count}")
-
-                            # В случае очень сильного роста, можем запланировать перезапуск
-                            if percentage_increase > 50:  # 50% рост
-                                logging.warning("Значительный рост памяти. Возможно, есть утечка памяти.")
-
-                    # Обновляем статистику
-                    memory_stats['last_rss'] = current_rss
-                    memory_stats['last_check'] = current_time
-
-                    # Логируем текущее использование памяти
-                    vm = psutil.virtual_memory()
-                    logging.info(f"Мониторинг памяти: "
-                               f"Процесс: {current_rss/(1024*1024):.1f}MB, "
-                               f"Система: доступно {vm.available/(1024*1024):.1f}MB из {vm.total/(1024*1024):.1f}MB ({vm.percent}%)")
-            except Exception as e:
-                logging.error(f"Ошибка в мониторинге памяти: {e}")
-
-            # Ждем 1 минуту перед следующей проверкой
-            time.sleep(60)
-
-    # Запускаем мониторинг в отдельном потоке
-    memory_thread = threading.Thread(target=check_memory_usage, daemon=True)
-    memory_thread.start()
-    return memory_thread
-
-def setup_network_monitoring():
-    """Настраивает мониторинг сетевой активности."""
-    def monitor_network():
-        last_check = time.time()
-        last_bytes_sent = 0
-        last_bytes_recv = 0
-
-        # Получаем начальные значения
-        try:
-            net_io = psutil.net_io_counters()
-            last_bytes_sent = net_io.bytes_sent
-            last_bytes_recv = net_io.bytes_recv
-        except Exception as e:
-            logging.error(f"Не удалось получить начальные значения сетевой активности: {e}")
-
-        while True:
-            try:
-                time.sleep(60)  # Проверяем каждую минуту
-
-                # Получаем текущие значения
-                net_io = psutil.net_io_counters()
-                current_time = time.time()
-                time_diff = current_time - last_check
-
-                # Вычисляем скорость передачи данных
-                bytes_sent_diff = net_io.bytes_sent - last_bytes_sent
-                bytes_recv_diff = net_io.bytes_recv - last_bytes_recv
-
-                # Конвертируем в KB/s
-                kb_sent_per_sec = bytes_sent_diff / time_diff / 1024
-                kb_recv_per_sec = bytes_recv_diff / time_diff / 1024
-
-                # Логируем значения каждые 5 минут или если обнаружена высокая активность
-                if time_diff >= 300 or kb_sent_per_sec > 100 or kb_recv_per_sec > 100:
-                    logging.info(f"Сетевая активность: Отправлено {kb_sent_per_sec:.1f} KB/s, Получено {kb_recv_per_sec:.1f} KB/s")
-                    last_check = current_time
-                    last_bytes_sent = net_io.bytes_sent
-                    last_bytes_recv = net_io.bytes_recv
-            except Exception as e:
-                logging.error(f"Ошибка в мониторинге сети: {e}")
-
-    # Запускаем мониторинг в отдельном потоке
-    network_thread = threading.Thread(target=monitor_network, daemon=True)
-    network_thread.start()
-    return network_thread
-
 def setup_logging():
     """Настраивает расширенное логирование для бота."""
     log_directory = "logs"
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
-
-    # Создаем ротируемый файл логов с временной меткой
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_directory, f"bot_{timestamp}.log")
-
+    
+    log_file = os.path.join(log_directory, "bot.log")
+    
     # Настройка логирования
     handlers = [
         logging.FileHandler(log_file),
         logging.StreamHandler(sys.stdout)
     ]
-
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=handlers
     )
-
+    
     # Дополнительное логирование для отслеживания необработанных исключений
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             # Если это KeyboardInterrupt (Ctrl+C), передаем управление стандартному обработчику
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-
+        
         logging.error("Необработанное исключение:", 
                      exc_info=(exc_type, exc_value, exc_traceback))
-
-        # Дополнительно логируем информацию о состоянии системы
-        try:
-            vm = psutil.virtual_memory()
-            process = psutil.Process(os.getpid())
-            mem_info = process.memory_info()
-            logging.error(f"Состояние системы при исключении: "
-                         f"RSS={mem_info.rss/(1024*1024):.1f}MB, "
-                         f"Доступно {vm.available/(1024*1024):.1f}MB из {vm.total/(1024*1024):.1f}MB ({vm.percent}%)")
-
-            # Также логируем информацию о потоках
-            logging.error(f"Активных потоков: {threading.active_count()}")
-        except Exception as e:
-            logging.error(f"Не удалось получить информацию о системе: {e}")
-
+    
     # Устанавливаем обработчик необработанных исключений
     sys.excepthook = handle_exception
-
-    # Добавляем периодическое логирование общей информации о состоянии
-    def log_system_state():
-        while True:
-            try:
-                # Логируем информацию о системе каждые 10 минут
-                vm = psutil.virtual_memory()
-                process = psutil.Process(os.getpid())
-                mem_info = process.memory_info()
-
-                logging.info(f"Периодический отчет о состоянии: "
-                           f"Процесс: {mem_info.rss/(1024*1024):.1f}MB, "
-                           f"CPU: {process.cpu_percent()}%, "
-                           f"Потоки: {threading.active_count()}, "
-                           f"Система: доступно {vm.available/(1024*1024):.1f}MB из {vm.total/(1024*1024):.1f}MB ({vm.percent}%)")
-            except Exception as e:
-                logging.error(f"Ошибка при логировании состояния системы: {e}")
-
-            # Ожидаем 10 минут
-            time.sleep(600)
-
-    # Запускаем периодическое логирование в отдельном потоке
-    state_thread = threading.Thread(target=log_system_state, daemon=True)
-    state_thread.start()
-
-    # Запускаем мониторинг памяти
-    setup_memory_monitoring()
-
-    # Запускаем мониторинг сети
-    setup_network_monitoring()
 
 def update_health_check():
     """Обновляет файл проверки здоровья текущим временем."""
@@ -220,7 +61,7 @@ def update_health_check():
 def check_and_kill_other_instances():
     """Проверяет наличие других экземпляров бота и завершает их."""
     current_pid = os.getpid()
-
+    
     try:
         # Ищем экземпляры бота с тем же именем скрипта
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
@@ -228,84 +69,42 @@ def check_and_kill_other_instances():
                 # Пропускаем текущий процесс
                 if proc.info['pid'] == current_pid:
                     continue
-
-                # Проверяем все возможные связанные процессы бота
-                is_bot_process = False
                 
-                # Проверка по командной строке
-                if proc.info['cmdline']:
-                    for cmd in proc.info['cmdline']:
-                        # Ищем основной скрипт бота или связанные скрипты
-                        if any(script_name in cmd for script_name in [
-                            BOT_PROCESS_NAME, 
-                            "bot_modified.py", 
-                            "bot_monitor.py",
-                            "python -m telegram",  # Процессы библиотеки telegram
-                            "getUpdates"  # Процессы получения обновлений
-                        ]):
-                            is_bot_process = True
-                            break
-
-                # Если это процесс бота
-                if is_bot_process:
-                    logging.warning(f"Найден другой процесс бота (PID: {proc.info['pid']}), завершаем его")
-
-                    try:
-                        # Пытаемся мягко завершить процесс
-                        process = psutil.Process(proc.info['pid'])
-                        process.terminate()
-                        
-                        # Даем процессу время на корректное завершение
-                        process.wait(timeout=3)
-                    except psutil.TimeoutExpired:
-                        # Если процесс не завершился, применяем SIGKILL
-                        logging.warning(f"Процесс {proc.info['pid']} не отвечает, принудительно завершаем")
-                        process.kill()
-                    except psutil.NoSuchProcess:
-                        # Процесс уже завершен
-                        pass
-                    except Exception as e:
-                        logging.error(f"Ошибка при завершении процесса {proc.info['pid']}: {e}")
-
-            except (psutil.NoSuchProcess, psutil.AccessDenied, KeyError):
-                # Процесс мог завершиться между итерациями или нет доступа
-                continue
-            except Exception as e:
-                logging.error(f"Ошибка при проверке процесса: {e}")
-
-        # Для надежности также пробуем использовать pkill
-        try:
-            os.system(f"pkill -f {BOT_PROCESS_NAME}")
-            os.system(f"pkill -f 'python.*bot_modified.py'")
-            os.system(f"pkill -f 'python.*bot_monitor.py'")
-            os.system(f"pkill -f 'python.*getUpdates'")
-        except Exception as e:
-            logging.error(f"Ошибка при выполнении pkill: {e}")
-
-        # Небольшая пауза, чтобы процессы успели завершиться
-        time.sleep(3)
-    
+                # Проверяем, не является ли процесс экземпляром бота
+                if proc.info['cmdline'] and any(BOT_PROCESS_NAME in cmd for cmd in proc.info['cmdline']):
+                    logging.warning(f"Найден другой экземпляр бота (PID: {proc.info['pid']}), завершаем его")
+                    
+                    # Пытаемся мягко завершить процесс
+                    os.kill(proc.info['pid'], signal.SIGTERM)
+                    time.sleep(2)  # Даем время на завершение
+                    
+                    # Если процесс все еще жив, применяем SIGKILL
+                    if psutil.pid_exists(proc.info['pid']):
+                        os.kill(proc.info['pid'], signal.SIGKILL)
+                        logging.warning(f"Процесс {proc.info['pid']} принудительно завершен")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
+                logging.warning(f"Ошибка при проверке процесса: {e}")
     except Exception as e:
-        logging.error(f"Ошибка при поиске других экземпляров бота: {e}")
+        logging.error(f"Ошибка при проверке других экземпляров: {e}")
 
 def try_lock_file():
     """Пытается получить блокировку файла для предотвращения запуска нескольких экземпляров."""
     try:
         # Создаем файл блокировки, если он не существует
         lock_file_handle = open(LOCK_FILE, 'w')
-
+        
         # Пытаемся получить эксклюзивную блокировку файла
         fcntl.lockf(lock_file_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
+        
         # Если блокировка получена успешно, возвращаем дескриптор файла
         return lock_file_handle
     except IOError:
         # Не удалось получить блокировку - другой экземпляр уже запущен
         logging.error("Не удалось получить блокировку файла. Другой экземпляр бота уже запущен.")
-
+        
         # Проверяем и убиваем другие экземпляры
         check_and_kill_other_instances()
-
+        
         # Пробуем еще раз получить блокировку
         time.sleep(2)
         return try_lock_file()
@@ -327,26 +126,24 @@ def setup_health_update():
     """Настраивает регулярное обновление файла здоровья."""
     # Обновляем файл здоровья при запуске
     update_health_check()
-
+    
     # Настраиваем сигнальный обработчик для обновления файла здоровья
     def health_signal_handler(signum, frame):
         update_health_check()
-
+    
     # Регистрируем обработчик для сигнала SIGUSR1
     signal.signal(signal.SIGUSR1, health_signal_handler)
-
+    
     # Запускаем процесс регулярного обновления файла здоровья
     def send_health_signal():
         """Функция для отправки сигнала SIGUSR1 себе."""
         while True:
             try:
                 os.kill(os.getpid(), signal.SIGUSR1)
-                # Также добавляем прямое обновление файла здоровья для надежности
-                update_health_check()
-            except Exception as e:
-                logging.error(f"Ошибка в процессе обновления здоровья: {e}")
-            time.sleep(60)  # Увеличиваем интервал до 60 секунд для снижения нагрузки
-
+            except:
+                pass
+            time.sleep(30)  # Обновляем каждые 30 секунд
+    
     # Запускаем функцию в отдельном потоке
     import threading
     health_thread = threading.Thread(target=send_health_signal, daemon=True)
@@ -354,308 +151,57 @@ def setup_health_update():
 
 def main():
     """Main function to start the Telegram bot."""
-    
-    # Проверяем, возможно бот уже запущен через webhook-мониторинг
-    try:
-        with open("bot_health.txt", "r") as f:
-            health_data = f.read().strip()
-            
-        # Проверяем свежесть данных о здоровье
-        import datetime
-        now = datetime.datetime.now()
-        health_time = datetime.datetime.strptime(health_data, "%Y-%m-%d %H:%M:%S")
-        
-        # Если файл обновлялся недавно (менее 2 минут назад), значит webhook-монитор работает
-        if (now - health_time).total_seconds() < 120:
-            logging.info(f"Обнаружен активный webhook-монитор (последнее обновление: {health_data})")
-            
-            # Запускаем webhook_monitor.py для поддержки webhook
-            import os
-            import subprocess
-            
-            # Проверяем, существует ли файл webhook_monitor.py
-            if os.path.exists("webhook_monitor.py"):
-                logging.info("Запускаем webhook_monitor.py для поддержки webhook...")
-                subprocess.Popen(["python", "webhook_monitor.py"])
-                
-                # Ждем, чтобы бот успешно запустился и не завершался сразу
-                import time
-                time.sleep(60)
-                return
-    except Exception as e:
-        logging.warning(f"Не удалось определить статус webhook-монитора: {e}")
-    
-    # Если мы здесь, то продолжаем обычный запуск
     # Setup logging
     setup_logging()
-
+    
     # Пытаемся получить блокировку файла
     lock_file_handle = try_lock_file()
     if not lock_file_handle:
         logging.critical("Не удалось получить блокировку файла после нескольких попыток. Выход.")
         return
-
+    
     # Настраиваем обновление файла здоровья
     setup_health_update()
-
+    
     try:
         # Проверяем и убиваем другие экземпляры бота
         check_and_kill_other_instances()
-
-        max_retries = 10  # Увеличиваем количество попыток
+        
+        max_retries = 5
         retry_count = 0
-
-        # Логирование версии Python и системной информации
-        logging.info(f"Python version: {sys.version}")
-
-        # Логирование информации о системной памяти
-        vm = psutil.virtual_memory()
-        logging.info(f"System memory: total={vm.total/(1024*1024):.1f}MB, available={vm.available/(1024*1024):.1f}MB, percent={vm.percent}%")
-
+        
         while retry_count < max_retries:
             try:
-                # Обновляем файл здоровья перед каждой попыткой запуска
-                update_health_check()
-
                 # Get the bot application
                 application = setup_bot()
                 
-                # Добавляем метод синхронной обработки для webhook
-                def process_update_sync(update):
-                    """
-                    Синхронная версия process_update для использования в webhook.
-                    
-                    Args:
-                        update: Объект Update для обработки
-                    """
-                    try:
-                        import asyncio
-                        
-                        # Получаем или создаем event loop
-                        try:
-                            loop = asyncio.get_event_loop()
-                        except RuntimeError:
-                            # Если loop не существует в текущем потоке
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                        
-                        # Запускаем обработку в цикле событий
-                        loop.run_until_complete(application.process_update(update))
-                        
-                        return True
-                    except Exception as e:
-                        logging.error(f"Ошибка при синхронной обработке обновления: {e}")
-                        return False
-                
-                # Добавляем метод к экземпляру приложения
-                application.process_update_sync = process_update_sync
-
                 # Log startup message
                 logging.info("Runner profile bot started successfully!")
-
-                # Настраиваем обработчики сигналов для корректного завершения
-                def signal_handler(signum, frame):
-                    logging.info(f"Получен сигнал {signum}, завершаем работу бота")
-                    application.stop()
-
-                # Регистрируем обработчики сигналов
-                signal.signal(signal.SIGTERM, signal_handler)
-                signal.signal(signal.SIGINT, signal_handler)
-
-                # Проверка подключения к Telegram API перед запуском
-                try:
-                    logging.info("Проверка подключения к Telegram API...")
-                    # Простая проверка подключения - не пытаемся вызывать корутины
-                    # Реальная проверка произойдет при вызове run_polling
-                    logging.info("Подключение к Telegram API успешно")
-                except Exception as e:
-                    logging.error(f"Ошибка подключения к Telegram API: {e}")
-                    logging.error(traceback.format_exc())
-                    raise  # Перезапустим бота через основной цикл retry
-
-                # Настройка обработчика сетевых ошибок
-                # Вызывается при возникновении сетевых проблем
-                async def network_error_handler(update, context):
-                    logging.error(f"Ошибка сети при обработке обновления: {context.error}")
-                    # Запись состояния памяти при сетевых ошибках
-                    vm = psutil.virtual_memory()
-                    logging.info(f"Состояние памяти: total={vm.total/(1024*1024):.1f}MB, available={vm.available/(1024*1024):.1f}MB, percent={vm.percent}%")
-                    # Обновляем файл здоровья для предотвращения перезапуска
-                    update_health_check()
-                    
-                    # Если произошла ошибка конфликта (несколько экземпляров бота)
-                    if "terminated by other getUpdates request" in str(context.error):
-                        logging.warning("Обнаружено несколько экземпляров бота, пробуем остановить конфликтующие процессы")
-                        check_and_kill_other_instances()
-                        time.sleep(5)  # Даем время для завершения других процессов
-
-                # Регистрируем обработчик ошибок
-                application.add_error_handler(network_error_handler)
-
-                # Run the bot until the user sends a signal to stop it
-                # Используем только те параметры, которые поддерживаются текущей версией
-                logging.info("Запускаем поллинг...")
-
-                # Настраиваем таймауты для бота
-                # Делаем это отдельно, т.к. некоторые параметры могут не поддерживаться в текущей версии
-                try:
-                    application.bot.defaults = {"timeout": 60}
-                except Exception as e:
-                    logging.warning(f"Не удалось установить таймаут для бота: {e}")
-
-                # Режим webhook включен для улучшения стабильности
-                # Использование webhook позволяет экономить ресурсы и обеспечивает мгновенную реакцию на сообщения
-                webhook_mode = True  # os.environ.get("USE_WEBHOOK", "false").lower() == "true"
                 
-                if webhook_mode:  # Используем режим webhook для обработки сообщений
-                    # В режиме вебхук не запускаем polling, Flask будет принимать обновления
-                    logging.info("Запускаем в режиме webhook...")
-                    # Предоставляем приложение для обработки обновлений через webhook
-                    # Используем новый webhook_handler вместо webhook_server
-                    from webhook_handler import register_webhook_routes, setup_webhook
-                    
-                    # Импортируем asyncio
-                    import asyncio
-                    
-                    # Инициализируем webhook без асинхронности
-                    try:
-                        # Напрямую вызываем setup_webhook с доменом Replit
-                        replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
-                        logging.info(f"Использую домен для webhook: {replit_domain}")
-                        setup_result = setup_webhook(replit_domain)
-                        if setup_result:
-                            logging.info("Webhook успешно настроен")
-                        else:
-                            logging.error("Не удалось настроить webhook")
-                    except Exception as e:
-                        logging.error(f"Ошибка при настройке webhook: {e}", exc_info=True)
-                    
-                    # Маршруты webhook уже зарегистрированы в app.py
-                    # register_webhook_routes(app, application)  # Закомментировано, чтобы избежать двойной регистрации
-                    logging.info("Webhook маршруты успешно зарегистрированы")
-                    
-                    # В этом режиме мы просто ожидаем без бесконечного цикла
-                    # Бот будет работать через webhook, обрабатываемый Flask
-                    while True:
-                        # Просто обновляем файл здоровья каждые 60 секунд
-                        update_health_check()
-                        time.sleep(60)
-                else:
-                    # Стандартный режим поллинга
-                    logging.info("Запускаем поллинг...")
-                    application.run_polling(
-                        drop_pending_updates=True,  # Игнорируем накопившиеся обновления
-                        allowed_updates=None,  # Принимаем все типы обновлений
-                        close_loop=False,  # Не закрываем цикл событий после остановки
-                        stop_signals=(signal.SIGINT, signal.SIGTERM),  # Сигналы для остановки
-                        timeout=60  # Увеличиваем timeout для долгих соединений до 60 секунд
-                    )
-
+                # Run the bot until the user sends a signal to stop it
+                application.run_polling(drop_pending_updates=True)  # Игнорируем накопившиеся обновления
+                
                 # Если мы дошли сюда, значит бот завершился нормально
-                logging.info("Бот завершился нормально")
                 break
-
+                
             except Exception as e:
                 retry_count += 1
                 logging.error(f"Ошибка в работе бота (попытка {retry_count}/{max_retries}): {e}")
                 logging.error(traceback.format_exc())
-
-                # Логирование состояния памяти при ошибке
-                try:
-                    process = psutil.Process(os.getpid())
-                    mem_info = process.memory_info()
-                    logging.warning(f"Memory usage: RSS={mem_info.rss/(1024*1024):.1f}MB, VMS={mem_info.vms/(1024*1024):.1f}MB")
-                except Exception as mem_e:
-                    logging.error(f"Не удалось получить информацию о памяти: {mem_e}")
-
+                
                 # Обновляем файл здоровья перед ожиданием
                 update_health_check()
-
+                
                 if retry_count < max_retries:
-                    # Используем экспоненциальную задержку для более эффективного восстановления
-                    wait_time = min(60, 5 * (2 ** retry_count))  # Максимум 60 секунд
+                    # Ждем перед повторной попыткой, увеличивая время ожидания с каждой попыткой
+                    wait_time = 10 * retry_count
                     logging.info(f"Перезапуск бота через {wait_time} секунд...")
                     time.sleep(wait_time)
                 else:
                     logging.critical("Превышено максимальное количество попыток перезапуска. Бот остановлен.")
-    except KeyboardInterrupt:
-        logging.info("Бот остановлен пользователем")
     finally:
-        # Завершающее логирование
-        logging.info("Завершение работы бота")
-
         # Освобождаем блокировку файла перед выходом
         release_lock(lock_file_handle)
 
 if __name__ == '__main__':
-    # Проверяем наличие аргументов командной строки
-    import sys
-    
-    if len(sys.argv) > 1 and sys.argv[1] == "--webhook":
-        # Запускаем бота в режиме webhook
-        import subprocess
-        import time
-        import os
-        
-        logging.info("Запуск в режиме webhook...")
-        
-        # Останавливаем все существующие процессы бота для предотвращения конфликтов
-        try:
-            logging.info("Останавливаем существующие процессы бота...")
-            os.system("pkill -f 'python.*bot_modified.py'")
-            os.system("pkill -f 'python.*run_telegram_bot.py'")
-            time.sleep(2)  # Даем процессам время завершиться
-        except Exception as e:
-            logging.error(f"Ошибка при остановке процессов: {e}")
-        
-        # Импортируем необходимые модули
-        from config import TELEGRAM_TOKEN
-        from webhook_handler import setup_webhook
-        
-        # Получаем домен Replit
-        replit_domain = os.environ.get('REPLIT_DOMAINS', '').split(',')[0]
-        if not replit_domain:
-            # Fallback к старому формату
-            replit_domain = f"{os.environ.get('REPL_SLUG')}.{os.environ.get('REPL_OWNER')}.repl.co"
-        logging.info(f"Использую домен для webhook: {replit_domain}")
-        
-        # Настраиваем webhook
-        setup_result = setup_webhook(replit_domain)
-        if setup_result:
-            logging.info("Webhook успешно настроен")
-        else:
-            logging.error("Не удалось настроить webhook")
-            sys.exit(1)
-        
-        # Основной цикл обновления файла здоровья и мониторинга webhook
-        logging.info("Бот запущен в режиме webhook. Мониторим состояние...")
-        
-        while True:
-            # Обновляем файл здоровья
-            try:
-                import datetime
-                now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                with open("bot_health.txt", "w") as f:
-                    f.write(now)
-                logging.info(f"Файл здоровья обновлен: {now}")
-            except Exception as e:
-                logging.error(f"Ошибка при обновлении файла здоровья: {e}")
-            
-            # Проверяем, что webhook по-прежнему настроен
-            try:
-                import requests
-                check_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
-                response = requests.get(check_url)
-                if response.status_code == 200:
-                    webhook_info = response.json()
-                    if not webhook_info.get("result", {}).get("url"):
-                        logging.error("Webhook не настроен! Переустанавливаем...")
-                        setup_webhook(replit_domain)
-            except Exception as e:
-                logging.error(f"Ошибка при проверке состояния webhook: {e}")
-            
-            # Ждем 60 секунд перед следующей проверкой
-            time.sleep(60)
-    else:
-        # Обычный запуск основной функции
-        main()
+    main()
