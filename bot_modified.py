@@ -278,19 +278,24 @@ async def update_profile_command(update, context):
         )
         return
     
-    # Отправляем сообщение об обновлении профиля
+    # Создаем объект для работы с профилем и запускаем процесс обновления
+    from conversation import RunnerProfileConversation
+    profile_conv = RunnerProfileConversation()
+    
+    # Инициализируем обновление профиля
     if hasattr(update, 'callback_query'):
-        # Если метод вызван из callback_query_handler
-        await update.callback_query.message.reply_text(
-            "Давайте обновим ваш профиль бегуна. Я задам вам несколько вопросов для сбора информации."
-        )
+        # Если метод вызван из callback_query_handler, используем объект callback_query.message
+        # как исходное сообщение для обновления
+        new_update = update
+        # Добавляем свойство message, чтобы оно указывало на message из callback_query
+        new_update.message = update.callback_query.message
+        # Запускаем диалог обновления профиля
+        await profile_conv.start_update(new_update, context)
     else:
         # Если метод вызван из команды
-        await update.message.reply_text(
-            "Давайте обновим ваш профиль бегуна. Я задам вам несколько вопросов для сбора информации."
-        )
+        await profile_conv.start_update(update, context)
     
-    # Конверсейшн хэндлер добавлен в setup_bot и сам обработает начало диалога
+    # После вызова start_update соответствующий ConversationHandler обработает последующие сообщения
 
 async def callback_query_handler(update, context):
     """Handler for inline button callbacks."""
@@ -578,86 +583,16 @@ async def callback_query_handler(update, context):
                 await conversation.start(update, context)
                 return
             
-            # Получаем последний план пользователя
-            current_plan = TrainingPlanManager.get_latest_training_plan(db_user_id)
+            # Получаем сообщение о подготовке нового плана
+            with open("attached_assets/котик.jpeg", "rb") as photo:
+                await query.message.reply_photo(
+                    photo=photo,
+                    caption="⏳ Генерирую новый персонализированный план тренировок с учетом вашего обновленного профиля. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
+                )
             
-            if not current_plan:
-                # Если нет текущего плана, генерируем новый план с нуля
-                with open("attached_assets/котик.jpeg", "rb") as photo:
-                    await query.message.reply_photo(
-                        photo=photo,
-                        caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
-                    )
-                
-                # Получаем сервис OpenAI и генерируем план
-                openai_service = OpenAIService()
-                plan = openai_service.generate_training_plan(profile)
-            else:
-                # Если есть текущий план, создаем его продолжение
-                plan_id = current_plan['id']
-                # Проверяем, есть ли завершенные тренировки
-                completed_trainings = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
-                
-                # Расчет общего пройденного расстояния
-                total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id) 
-                
-                # Добавляем логирование для отладки
-                logging.info(f"Вычисленная дистанция: {total_distance:.1f} км")
-                
-                # Убедимся, что дистанция не может быть отрицательной или нулевой
-                if total_distance <= 0:
-                    # Перепроверим расчет дистанции напрямую из плана
-                    try:
-                        # Получаем завершенные дни для текущего плана
-                        completed_training_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
-                        
-                        recalculated_distance = 0
-                        for day_num in completed_training_days:
-                            day_idx = day_num - 1
-                            # Определяем правильную структуру плана
-                            training_days = []
-                            if 'training_days' in current_plan:
-                                training_days = current_plan['training_days']
-                            elif 'plan_data' in current_plan and isinstance(current_plan['plan_data'], dict) and 'training_days' in current_plan['plan_data']:
-                                training_days = current_plan['plan_data']['training_days']
-                            
-                            if day_idx < 0 or day_idx >= len(training_days):
-                                continue
-                            
-                            day_data = training_days[day_idx]
-                            distance_str = day_data.get('distance', '0 км').split()[0]
-                            try:
-                                distance = float(distance_str)
-                                recalculated_distance += distance
-                            except (ValueError, TypeError):
-                                pass
-                        
-                        if recalculated_distance > 0:
-                            total_distance = recalculated_distance
-                            logging.info(f"Пересчитали дистанцию: {total_distance:.1f} км")
-                    except Exception as e:
-                        logging.error(f"Ошибка при перерасчете дистанции: {e}")
-                
-                # Убедимся, что прогресс не может быть меньше или равен нулю
-                progress_display = f" с учетом вашего прогресса ({total_distance:.1f} км)"
-                if total_distance <= 0:
-                    progress_display = ""
-                
-                with open("attached_assets/котик.jpeg", "rb") as photo:
-                    await query.message.reply_photo(
-                        photo=photo,
-                        caption=f"⏳ Генерирую продолжение плана тренировок{progress_display}. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
-                    )
-                
-                # Получаем сервис OpenAI и генерируем продолжение плана
-                openai_service = OpenAIService()
-                
-                # Определяем правильную структуру данных для плана
-                plan_data_for_api = current_plan
-                if 'plan_data' in current_plan and isinstance(current_plan['plan_data'], dict):
-                    plan_data_for_api = current_plan['plan_data']
-                
-                plan = openai_service.generate_training_plan_continuation(profile, total_distance, plan_data_for_api)
+            # Получаем сервис OpenAI и генерируем полностью новый план по обновленному профилю
+            openai_service = OpenAIService()
+            plan = openai_service.generate_training_plan(profile)
             
             # Сохраняем план в базу данных
             plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
