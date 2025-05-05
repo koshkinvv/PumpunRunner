@@ -6,7 +6,7 @@ packages = ["jq", "openssl", "postgresql"]
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 app:app --access-logfile -"]
+run = ["sh", "-c", "bash start_24_7.sh"]
 
 [workflows]
 runButton = "Bot 24/7"
