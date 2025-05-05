@@ -302,6 +302,59 @@ def handle_callback_query(application, update_data):
                                     except:
                                         logger.error(f"Не удалось преобразовать дистанцию '{distance}' в число")
                         
+                        # Проверяем, завершены ли все тренировки в плане
+                        try:
+                            # Получаем списки выполненных и отмененных тренировок
+                            completed_days = TrainingPlanManager.get_completed_trainings(db_user_id, plan_id)
+                            canceled_days = TrainingPlanManager.get_canceled_trainings(db_user_id, plan_id)
+                            processed_days = completed_days + canceled_days
+                            
+                            # Количество тренировок в плане
+                            total_days = len(plan['plan_data']['training_days'])
+                            
+                            # Проверка, все ли тренировки выполнены или отменены
+                            has_pending_trainings = any(day_num not in processed_days for day_num in range(1, total_days + 1))
+                            
+                            # Если все тренировки выполнены или отменены, отправляем поздравительное сообщение
+                            if not has_pending_trainings:
+                                # Расчет общего пройденного расстояния
+                                total_distance = TrainingPlanManager.calculate_total_completed_distance(db_user_id, plan_id)
+                                
+                                # Получаем обновленный еженедельный объем в профиле пользователя
+                                profile = DBManager.get_runner_profile(db_user_id)
+                                weekly_volume = profile.get('weekly_volume', 0) if profile else 0
+                                
+                                # Форматируем для отображения
+                                from bot_modified import format_weekly_volume
+                                formatted_volume = format_weekly_volume(weekly_volume, str(total_distance))
+                                
+                                # Создаем кнопку для продолжения тренировок
+                                continue_button = {
+                                    "text": "🔄 Продолжить тренировки",
+                                    "callback_data": f"continue_plan_{plan_id}"
+                                }
+                                keyboard = [[continue_button]]
+                                
+                                # Отправляем сообщение напрямую через API
+                                url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+                                data = {
+                                    "chat_id": chat_id,
+                                    "text": (
+                                        f"🎉 Поздравляем! Все тренировки в вашем текущем плане выполнены или отменены!\n\n"
+                                        f"Вы пробежали в общей сложности {total_distance:.1f} км, и ваш еженедельный объем бега обновлен до {formatted_volume}.\n\n"
+                                        f"Хотите продолжить тренировки с учетом вашего прогресса?"
+                                    ),
+                                    "reply_markup": {
+                                        "inline_keyboard": keyboard
+                                    }
+                                }
+                                
+                                response = requests.post(url, json=data)
+                                if response.status_code != 200:
+                                    logger.error(f"Ошибка при отправке поздравления: {response.text}")
+                        except Exception as e:
+                            logger.error(f"Ошибка при проверке статуса плана: {e}")
+                        
                         # Обновляем сообщение, заменяя кнопки на отметку о выполнении
                         message_id = callback_query['message']['message_id']
                         message_text = callback_query['message']['text']
@@ -554,6 +607,98 @@ def handle_callback_query(application, update_data):
         elif callback_data == 'no_adjust':
             # Пользователь отказался от корректировки плана
             send_telegram_message(chat_id, "План тренировок оставлен без изменений.")
+        elif callback_data.startswith('continue_plan_'):
+            # Инициирует продолжение тренировок и создание нового плана
+            try:
+                # Разбираем callback_data для получения id текущего плана
+                plan_id = int(callback_data.split('_')[-1])
+                
+                # Получаем telegram_id из chat_id
+                telegram_id = chat_id
+                
+                # Получаем user_id из telegram_id
+                db_user_id = DBManager.get_user_id(telegram_id)
+                
+                if not db_user_id:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+
+                # Получаем профиль пользователя
+                profile = DBManager.get_runner_profile(db_user_id)
+                if not profile:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш беговой профиль. Пожалуйста, начните заново с команды /start.")
+                    return
+                
+                # Получаем текущий план тренировок и его данные
+                old_plan = TrainingPlanManager.get_training_plan(db_user_id, plan_id)
+                if not old_plan or 'plan_data' not in old_plan:
+                    send_telegram_message(chat_id, "❌ Не удалось найти ваш предыдущий план тренировок.")
+                    return
+                
+                # Сообщаем пользователю о начале генерации нового плана
+                send_telegram_message(chat_id, "🔄 Генерирую новый план тренировок с учетом вашего прогресса...")
+                
+                # Импортируем генератор плана
+                try:
+                    from openai_service import generate_training_plan
+                    from bot_modified import format_training_plan_message
+                except ImportError:
+                    logger.error("Не удалось импортировать генератор планов тренировок")
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при генерации плана. Пожалуйста, попробуйте позже.")
+                    return
+                
+                # Получаем данные для генерации
+                plan_data = old_plan['plan_data']
+                weekly_volume = profile.get('weekly_volume', 0)
+                
+                # Генерируем новый план тренировок
+                try:
+                    # Дополняем профиль с данными из предыдущего плана
+                    profile_for_plan = profile.copy()
+                    profile_for_plan['weekly_volume'] = weekly_volume
+                    
+                    # Передаем данные для генерации нового плана
+                    new_plan = generate_training_plan(profile_for_plan)
+                    
+                    if not new_plan:
+                        send_telegram_message(chat_id, "❌ Не удалось сгенерировать новый план тренировок. Пожалуйста, попробуйте позже.")
+                        return
+                    
+                    # Сохраняем новый план в базу данных
+                    plan_saved = TrainingPlanManager.save_training_plan(db_user_id, new_plan)
+                    
+                    if not plan_saved:
+                        send_telegram_message(chat_id, "❌ Не удалось сохранить новый план тренировок. Пожалуйста, попробуйте позже.")
+                        return
+                    
+                    # Форматируем сообщение с планом
+                    plan_message = format_training_plan_message(new_plan)
+                    
+                    # Создаем кнопки для просмотра плана
+                    view_plan_button = {
+                        "text": "👁 Посмотреть текущий план",
+                        "callback_data": "view_plan"
+                    }
+                    keyboard = [[view_plan_button]]
+                    
+                    # Отправляем план пользователю
+                    send_message_with_keyboard(
+                        chat_id,
+                        f"✅ Новый план тренировок успешно создан!\n\n{plan_message}",
+                        keyboard
+                    )
+                    
+                    # Отвечаем на callback_query
+                    answer_callback_query(callback_id, "✅ Новый план тренировок создан!")
+                    
+                except Exception as e:
+                    logger.error(f"Ошибка при генерации нового плана: {e}", exc_info=True)
+                    send_telegram_message(chat_id, "❌ Произошла ошибка при генерации плана. Пожалуйста, попробуйте позже.")
+            
+            except Exception as e:
+                logger.error(f"Ошибка при обработке continue_plan: {e}", exc_info=True)
+                answer_callback_query(callback_id, "❌ Произошла ошибка при обработке запроса.", show_alert=True)
+        
         elif callback_data.startswith('adjust_plan_'):
             # Корректировка оставшегося плана тренировок
             try:
