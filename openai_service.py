@@ -289,6 +289,7 @@ class OpenAIService:
             
         prompt += (
             f"- Уровень физической подготовки: {profile.get('fitness_level', 'Неизвестно')}\n"
+            f"- Комфортный темп бега: {profile.get('comfortable_pace', 'Неизвестно')}\n"
             f"- Еженедельный объем бега: {profile.get('weekly_volume_text', profile.get('weekly_volume', 'Неизвестно'))} км\n\n"
             "План должен включать разнообразные тренировки (длительные, темповые, интервальные, восстановительные) "
             "с учетом уровня подготовки бегуна.\n\n"
@@ -356,6 +357,7 @@ class OpenAIService:
                 f"- Цель: {runner_profile.get('goal', 'Не указано')}\n"
                 f"- Целевое время: {runner_profile.get('target_time', 'Не указано')}\n"
                 f"- Уровень физической подготовки: {runner_profile.get('fitness', 'Не указано')}\n"
+                f"- Комфортный темп бега: {runner_profile.get('comfortable_pace', 'Не указано')}\n"
                 f"- Еженедельный объем бега: {runner_profile.get('weekly_volume', 'Не указано')} км\n\n"
                 
                 f"Текущий план тренировок:\n{json.dumps(current_plan, ensure_ascii=False, indent=2)}\n\n"
@@ -475,8 +477,9 @@ class OpenAIService:
             if runner_profile.get('goal') == 'Улучшить время':
                 profile_info += f"- Целевое время: {runner_profile.get('target_time', 'Неизвестно')}\n"
                 
-            # Добавляем уровень физической подготовки и недельный объем
+            # Добавляем уровень физической подготовки, комфортный темп и недельный объем
             profile_info += f"""- Уровень физической подготовки: {runner_profile.get('fitness_level', 'Неизвестно')}
+- Комфортный темп бега: {runner_profile.get('comfortable_pace', 'Неизвестно')}
 - Еженедельный объем бега: {runner_profile.get('weekly_volume', 'Неизвестно')} км
 
 - Бегун успешно выполнил предыдущий план тренировок за {days_passed} дней и пробежал в общей сложности {completed_distances:.1f} км.
