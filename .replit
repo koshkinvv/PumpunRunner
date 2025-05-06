@@ -22,7 +22,7 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "python main.py"]
+run = ["sh", "-c", "python start_bot_directly.py"]
 deploymentTarget = "gce"
 ignorePorts = true
 
