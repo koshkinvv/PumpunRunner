@@ -22,7 +22,7 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"]
+run = ["sh", "-c", "python main.py"]
 deploymentTarget = "gce"
 ignorePorts = true
 
