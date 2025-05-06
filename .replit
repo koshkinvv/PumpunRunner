@@ -22,7 +22,7 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "python start_bot_directly.py"]
+run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"]
 deploymentTarget = "gce"
 ignorePorts = true
 
@@ -64,3 +64,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_bot_directly.py"
+
+[[workflows.workflow]]
+name = "Production Bot"
+author = 41797496
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python production_bot.py"
