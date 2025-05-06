@@ -41,28 +41,35 @@ logger = logging.getLogger('production_bot')
 
 def kill_all_python_processes():
     """
-    Завершает все Python процессы, кроме текущего.
+    Завершает все Python процессы, связанные с ботом, кроме текущего.
     """
     current_pid = os.getpid()
     terminated_count = 0
     
     logger.info(f"Текущий PID: {current_pid}")
-    logger.info("Поиск и завершение всех Python процессов, кроме текущего...")
+    logger.info("Поиск и завершение процессов бота, кроме текущего...")
     
     try:
         # Сначала попробуем через psutil для большей точности
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
+                # Проверяем что это не текущий процесс
                 if proc.info['pid'] != current_pid:
-                    # Проверяем, что это Python процесс, связанный с ботом
+                    # Получаем командную строку процесса
                     cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
-                    if 'python' in cmdline.lower() and any(x in cmdline.lower() for x in ['bot', 'telegram', 'main.py']):
+                    
+                    # Проверяем, что это Python процесс, связанный с ботом
+                    # НО: исключаем production_bot.py, чтобы не завершить сам себя
+                    if ('python' in cmdline.lower() and 
+                        any(x in cmdline.lower() for x in ['bot', 'telegram', 'main.py']) and
+                        'production_bot.py' not in cmdline):
+                        
                         logger.info(f"Завершение процесса {proc.info['pid']}: {cmdline}")
                         try:
                             # Сначала пробуем SIGTERM
                             os.kill(proc.info['pid'], signal.SIGTERM)
                             terminated_count += 1
-                            time.sleep(2)
+                            time.sleep(1)
                             
                             # Если процесс все еще работает, используем SIGKILL
                             if psutil.pid_exists(proc.info['pid']):
@@ -74,18 +81,19 @@ def kill_all_python_processes():
     except Exception as e:
         logger.error(f"Ошибка при поиске процессов через psutil: {e}")
     
-    # Дополнительно используем более агрессивный системный подход
+    # Вместо pkill используем более точные команды, чтобы не завершить текущий процесс
     try:
-        os.system("pkill -9 -f 'python.*bot'")
-        os.system("pkill -9 -f 'python.*main.py'")
-        os.system("pkill -9 -f 'python.*telegram'")
+        # Завершаем только процессы, связанные с ботом, но не текущий production_bot.py
+        os.system(f"pkill -9 -f 'python.*bot' -v -f 'production_bot.py'")
+        os.system(f"pkill -9 -f 'python.*main.py'")
+        os.system(f"pkill -9 -f 'python.*telegram' -v -f 'production_bot.py'")
     except Exception as e:
         logger.error(f"Ошибка при завершении процессов через pkill: {e}")
     
     logger.info(f"Завершено {terminated_count} Python процессов")
     
     # Даем время на завершение всех процессов
-    time.sleep(5)
+    time.sleep(3)
     
     return terminated_count
 
@@ -166,17 +174,36 @@ def run_bot():
     Запускает бота и отслеживает его работу
     """
     try:
-        # Получаем настроенное приложение из bot_modified.py
-        from bot_modified import setup_bot
-        
+        # Проверяем наличие файла bot_modified.py
+        if not os.path.exists("bot_modified.py"):
+            logger.error("Файл bot_modified.py не найден! Проверьте имя файла и его наличие.")
+            # Пробуем запустить с оригинальным ботом
+            if os.path.exists("bot.py"):
+                logger.info("Пробуем использовать bot.py вместо bot_modified.py...")
+                from bot import setup_bot
+            else:
+                logger.error("Ни bot_modified.py, ни bot.py не найдены! Невозможно запустить бота.")
+                return False
+        else:
+            # Получаем настроенное приложение из bot_modified.py
+            logger.info("Импортируем setup_bot из bot_modified.py...")
+            from bot_modified import setup_bot
+
         # Настраиваем и запускаем бота в режиме polling
         logger.info("Настройка приложения бота...")
         application = setup_bot()
         
         logger.info("Запуск бота в режиме polling...")
         application.run_polling(drop_pending_updates=True)
+        return True
+    except ImportError as ie:
+        logger.error(f"Ошибка импорта при запуске бота: {ie}")
+        logger.error("Возможно, проблема с импортом setup_bot из bot_modified.py")
+        logger.error("Попробуйте проверить имя модуля и функции")
+        return False
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
+        logger.exception("Детали исключения:")
         return False
 
 def main():
