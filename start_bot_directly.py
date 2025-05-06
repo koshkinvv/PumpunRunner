@@ -9,6 +9,7 @@ import signal
 import logging
 import psutil
 import time
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 from bot_modified import setup_bot
