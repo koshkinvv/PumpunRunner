@@ -1,15 +1,16 @@
+
 #!/usr/bin/env python
 """
-Скрипт для прямого запуска бота в одном процессе.
-Оптимизирован для использования в workflow bot_runner.
+Прямой запуск бота для workflow и деплоя.
 """
-
 import os
 import sys
-import time
+import signal
 import logging
-import requests
-import json
+import psutil
+import time
+from telegram import Bot
+from telegram.error import TelegramError
 from bot_modified import setup_bot
 
 # Настройка логирования
@@ -21,68 +22,74 @@ logging.basicConfig(
         logging.FileHandler("logs/start_bot_directly.log")
     ]
 )
-
 logger = logging.getLogger('start_bot_directly')
 
-def reset_telegram_api():
-    """
-    Сбрасывает сессию Telegram API перед запуском.
-    """
-    token = os.environ.get('TELEGRAM_TOKEN')
-    if not token:
-        logger.error("TELEGRAM_TOKEN не найден!")
-        return False
-    
-    logger.info("Сброс сессии Telegram API...")
-    
-    # Удаляем вебхук
+def cleanup_telegram_session():
+    """Сброс сессии Telegram API"""
     try:
-        webhook_url = f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true"
-        response = requests.get(webhook_url)
-        logger.info(f"Удаление вебхука: {response.text}")
-    except Exception as e:
-        logger.error(f"Ошибка при удалении вебхука: {e}")
-    
-    # Сбрасываем getUpdates
-    for offset in range(1, 10):
-        try:
-            url = f"https://api.telegram.org/bot{token}/getUpdates?offset={offset*10}&limit=100"
-            response = requests.get(url)
-            logger.info(f"Сброс с offset={offset*10}: {response.status_code}")
+        token = os.getenv('TELEGRAM_TOKEN')
+        if not token:
+            logger.error("TELEGRAM_TOKEN не найден в переменных окружения")
+            return
             
-            # Если успешно, можем прервать цикл
-            if response.status_code == 200:
-                data = json.loads(response.text)
-                if data.get("ok", False) and len(data.get("result", [])) == 0:
-                    if offset >= 3:  # Минимум 3 успешных запроса
-                        break
-            
+        bot = Bot(token=token)
+        # Удаляем вебхук
+        result = bot.delete_webhook()
+        logger.info(f"Удаление вебхука: {result}")
+        
+        # Сброс обновлений с разными offset
+        for offset in [10, 20, 30]:
+            try:
+                status = bot.get_updates(offset=offset, timeout=1)
+                logger.info(f"Сброс с offset={offset}: {status.status_code if hasattr(status, 'status_code') else 200}")
+            except TelegramError as e:
+                logger.warning(f"Ошибка при сбросе обновлений (offset={offset}): {e}")
             time.sleep(2)
-        except Exception as e:
-            logger.error(f"Ошибка при сбросе с offset={offset}: {e}")
-    
-    # Даем API время на обработку
-    time.sleep(5)
-    return True
+    except Exception as e:
+        logger.error(f"Ошибка при очистке сессии Telegram: {e}")
+
+def kill_other_bots():
+    """Завершает другие процессы бота"""
+    current_pid = os.getpid()
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if proc.pid == current_pid:
+                continue
+            if proc.info['cmdline'] and any('python' in cmd.lower() for cmd in proc.info['cmdline']):
+                if any('bot' in cmd.lower() for cmd in proc.info['cmdline']):
+                    logger.info(f"Завершаем процесс бота: {proc.pid}")
+                    os.kill(proc.pid, signal.SIGTERM)
+                    time.sleep(1)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
 
 def main():
-    """
-    Основная функция запуска бота.
-    """
+    """Основная функция запуска"""
     logger.info("=" * 50)
     logger.info("ПРЯМОЙ ЗАПУСК БОТА ДЛЯ WORKFLOW")
     logger.info("=" * 50)
     
-    # Сбрасываем сессию API
-    reset_telegram_api()
-    
-    # Получаем настроенное приложение
-    logger.info("Настройка бота...")
-    application = setup_bot()
-    
-    # Запускаем в режиме polling
-    logger.info("Запуск бота...")
-    application.run_polling(drop_pending_updates=True)
+    try:
+        # Завершаем другие процессы бота
+        kill_other_bots()
+        
+        # Очищаем сессию Telegram
+        logger.info("Сброс сессии Telegram API...")
+        cleanup_telegram_session()
+        
+        # Настраиваем и запускаем бота
+        logger.info("Настройка бота...")
+        application = setup_bot()
+        
+        # Запускаем бота
+        logger.info("Запуск бота...")
+        application.run_polling(drop_pending_updates=True)
+        
+    except KeyboardInterrupt:
+        logger.info("Получен сигнал завершения")
+    except Exception as e:
+        logger.error(f"Ошибка при запуске бота: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
