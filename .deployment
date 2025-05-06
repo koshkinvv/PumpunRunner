@@ -1,3 +1,3 @@
 [run]
 production_environment = true
-run_command = "python simple_worker.py"
+run_command = "python telegram_check.py"
