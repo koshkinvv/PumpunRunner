@@ -22,7 +22,7 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "python deploy.py"]
+run = ["sh", "-c", "python start_bot_directly.py"]
 deploymentTarget = "gce"
 ignorePorts = true
 
@@ -63,4 +63,4 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python deploy.py"
+args = "python start_bot_directly.py"
