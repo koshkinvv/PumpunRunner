@@ -22,7 +22,7 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "python deploy_runner.py"]
+run = ["sh", "-c", "python deploy.py"]
 deploymentTarget = "gce"
 ignorePorts = true
 
@@ -36,6 +36,7 @@ localPort = 5000
 externalPort = 80
 
 [workflows]
+runButton = "Bot Runner"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -54,3 +55,12 @@ author = 41797496
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_bot_directly.py"
+
+[[workflows.workflow]]
+name = "Bot Runner"
+author = 41797496
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python deploy.py"
