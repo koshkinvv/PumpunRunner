@@ -937,10 +937,67 @@ async def callback_query_handler(update, context):
     # Обработка кнопки "Создать новый план"
     elif query.data == "new_plan":
         try:
+            logging.info(f"Пользователь {telegram_id} (ID: {db_user_id}) запросил создание нового плана")
+            
+            # Проверяем статус оплаты - в расширенном варианте с детальным логированием
+            logging.info(f"Проверяем статус оплаты для пользователя {telegram_id} (ID: {db_user_id})")
+            payment_status = DBManager.get_payment_status(db_user_id)
+            logging.info(f"Статус оплаты: {payment_status}")
+            
+            if not payment_status or not payment_status.get('payment_agreed', False):
+                logging.warning(f"Пользователь {telegram_id} (ID: {db_user_id}) не имеет подтвержденного статуса оплаты")
+                # Предлагаем оплату
+                reply_markup = ReplyKeyboardMarkup(
+                    [
+                        ['Да, буду платить 500 рублей в месяц'],
+                        ['Нет. Я и так МАШИНА Ой БОЙ!']
+                    ],
+                    one_time_keyboard=True,
+                    resize_keyboard=True
+                )
+                
+                await query.message.reply_text(
+                    "Для доступа к функции создания плана тренировок необходимо оформить подписку. " +
+                    "Бот стоит 500 рублей в месяц с гарантией добавления новых фичей и легкой отменой!",
+                    reply_markup=reply_markup
+                )
+                
+                # Сохраняем состояние - ожидаем ответа на вопрос об оплате
+                context.user_data['awaiting_payment_confirmation'] = True
+                return
+            else:
+                logging.info(f"Пользователь {telegram_id} (ID: {db_user_id}) имеет подтвержденный статус оплаты")
+                
+                # Проверяем срок действия подписки
+                if not DBManager.check_active_subscription(db_user_id):
+                    logging.warning(f"Подписка пользователя {telegram_id} (ID: {db_user_id}) истекла")
+                    # Предлагаем оплату снова
+                    reply_markup = ReplyKeyboardMarkup(
+                        [
+                            ['Да, буду платить 500 рублей в месяц'],
+                            ['Нет. Я и так МАШИНА Ой БОЙ!']
+                        ],
+                        one_time_keyboard=True,
+                        resize_keyboard=True
+                    )
+                    
+                    await query.message.reply_text(
+                        "Ваша подписка истекла. Для продолжения использования функции создания плана тренировок необходимо продлить подписку. " +
+                        "Бот стоит 500 рублей в месяц с гарантией добавления новых фичей и легкой отменой!",
+                        reply_markup=reply_markup
+                    )
+                    
+                    # Сохраняем состояние - ожидаем ответа на вопрос об оплате
+                    context.user_data['awaiting_payment_confirmation'] = True
+                    return
+            
             # Получаем профиль пользователя
+            logging.info(f"Получаем профиль для пользователя {telegram_id} (ID: {db_user_id})")
             profile = DBManager.get_runner_profile(db_user_id)
+            logging.info(f"Профиль пользователя: {profile}")
             
             if not profile:
+                logging.warning(f"Профиль для пользователя {telegram_id} (ID: {db_user_id}) не найден")
                 # Инициируем сбор данных о пользователе
                 await query.message.reply_text(
                     "Для создания персонализированного плана тренировок мне нужно собрать некоторую информацию о вас. "
@@ -966,9 +1023,11 @@ async def callback_query_handler(update, context):
             
             # Устанавливаем флаг, что план создается
             user_data['is_generating_plan'] = True
+            logging.info(f"Установлен флаг is_generating_plan для пользователя {telegram_id}")
             
             try:
                 # Получаем сообщение о подготовке нового плана
+                logging.info(f"Отправляем сообщение о подготовке плана пользователю {telegram_id}")
                 with open("attached_assets/котик.jpeg", "rb") as photo:
                     await query.message.reply_photo(
                         photo=photo,
@@ -976,14 +1035,29 @@ async def callback_query_handler(update, context):
                     )
                 
                 # Получаем сервис OpenAI и генерируем полностью новый план по обновленному профилю
+                logging.info(f"Создаем экземпляр OpenAI сервиса для пользователя {telegram_id}")
                 openai_service = OpenAIService()
-                plan = openai_service.generate_training_plan(profile)
+                
+                logging.info(f"Начинаем генерацию плана для пользователя {telegram_id} с профилем: {profile}")
+                try:
+                    plan = openai_service.generate_training_plan(profile)
+                    logging.info(f"План успешно сгенерирован для пользователя {telegram_id}: {plan}")
+                except Exception as openai_error:
+                    logging.error(f"Ошибка при генерации плана через OpenAI для пользователя {telegram_id}: {openai_error}")
+                    await query.message.reply_text(
+                        "❌ Произошла ошибка при генерации плана. Возможно, проблема с OpenAI API. Пожалуйста, попробуйте позже."
+                    )
+                    user_data['is_generating_plan'] = False
+                    return
                 
                 # Сохраняем план в базу данных
+                logging.info(f"Сохраняем план в базу данных для пользователя {telegram_id}")
                 plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
                 
                 if not plan_id:
+                    logging.error(f"Не удалось сохранить план в базу данных для пользователя {telegram_id}")
                     await query.message.reply_text("❌ Произошла ошибка при сохранении плана. Пожалуйста, попробуйте позже.")
+                    user_data['is_generating_plan'] = False
                     return
                 
                 # Отправляем общую информацию о плане
