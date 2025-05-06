@@ -2,7 +2,6 @@ run = "python start_bot_directly.py"
 hidden = ["venv", ".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
 modules = ["postgresql-16"]
 
-# Определение рабочих процессов (workflows)
 [interpreter]
 command = ["python3", "-u", "main.py"]
 
@@ -30,31 +29,12 @@ ignorePorts = true
 path = "/"
 port = 5000
 
-# Настройка отдельного процесса для бота
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [workflows]
 runButton = "Bot Runner"
-
-[[workflows.workflow]]
-name = "Start application"
-mode = "sequential"
-author = 41797496
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"
-
-[[workflows.workflow]]
-name = "bot_runner"
-mode = "sequential"
-author = 41797496
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python start_bot_directly.py"
 
 [[workflows.workflow]]
 name = "Bot Runner"
@@ -64,12 +44,3 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_bot_directly.py"
-
-[[workflows.workflow]]
-name = "Production Bot"
-author = 41797496
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python production_bot.py"
