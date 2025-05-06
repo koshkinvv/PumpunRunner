@@ -177,9 +177,9 @@ def stop_bot():
 # Инициализация БД при запуске
 try:
     with app.app_context():
-        import models  # noqa
+        from models import create_tables
         # Используем функцию create_tables из models.py
-        models.create_tables()
+        db.create_all()
         add_log("База данных инициализирована при запуске")
 except Exception as e:
     add_log(f"Ошибка при инициализации БД при запуске: {e}", "ERROR")

@@ -1,3 +1,8 @@
 [run]
 production_environment = true
 run_command = "python run_webapp.py"
+
+[processes]
+# Описание запускаемых процессов
+web = "python run_webapp.py"     # Веб-интерфейс для управления ботом
+bot = "python bot_runner.py"     # Telegram бот с полной функциональностью

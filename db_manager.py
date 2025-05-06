@@ -2,7 +2,21 @@ import psycopg2
 import psycopg2.extras
 from datetime import datetime
 from config import DB_CONFIG, logging
-from models import format_date
+
+# Определяем функцию format_date здесь, чтобы избежать циклического импорта
+def format_date(date_obj):
+    """Форматирует объект даты в строку."""
+    if date_obj is None:
+        return "Не указано"
+    if isinstance(date_obj, str):
+        try:
+            date_obj = datetime.strptime(date_obj, "%Y-%m-%d")
+        except ValueError:
+            return date_obj
+    try:
+        return date_obj.strftime("%d.%m.%Y")
+    except Exception:
+        return str(date_obj)
 
 class DBManager:
     """Database manager for PostgreSQL operations."""

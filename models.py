@@ -9,10 +9,29 @@ from datetime import datetime
 # Функция для создания всех таблиц
 def create_tables():
     """Создает все таблицы в базе данных."""
-    from app import app
-    with app.app_context():
+    # Избегаем циклического импорта
+    try:
         db.create_all()
         return True
+    except Exception as e:
+        import logging
+        logging.error(f"Ошибка при создании таблиц: {e}")
+        return False
+
+# Функция для форматирования даты
+def format_date(date_obj):
+    """Форматирует объект даты в строку."""
+    if date_obj is None:
+        return "Не указано"
+    if isinstance(date_obj, str):
+        try:
+            date_obj = datetime.strptime(date_obj, "%Y-%m-%d")
+        except ValueError:
+            return date_obj
+    try:
+        return date_obj.strftime("%d.%m.%Y")
+    except Exception:
+        return str(date_obj)
 
 class User(db.Model):
     """Таблица пользователей."""
