@@ -31,10 +31,15 @@ class RunnerProfileConversation:
         user = update.effective_user
         telegram_id = user.id
         
+        # Проверяем, вызван ли метод из callback_query
+        is_callback = hasattr(update, 'callback_query')
+        
         # Получаем id пользователя в БД
         db_user_id = DBManager.get_user_id(telegram_id)
         if not db_user_id:
-            await update.message.reply_text(
+            # Определяем метод для отправки сообщения в зависимости от источника вызова
+            send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
+            await send_message(
                 "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
             )
             return ConversationHandler.END
@@ -42,10 +47,16 @@ class RunnerProfileConversation:
         # Получаем текущий профиль бегуна
         runner_profile = DBManager.get_runner_profile(db_user_id)
         if not runner_profile:
-            await update.message.reply_text(
+            # Определяем метод для отправки сообщения в зависимости от источника вызова
+            send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
+            await send_message(
                 "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
             )
             return ConversationHandler.END
+        
+        # Если метод вызван из callback_query, отвечаем на callback
+        if is_callback:
+            await update.callback_query.answer()
         
         # Начинаем диалог обновления профиля с первого шага - дистанции
         # Показываем текущее значение для каждого поля
@@ -55,9 +66,12 @@ class RunnerProfileConversation:
         # Добавляем информацию, что это обновление существующего профиля
         context.user_data['is_profile_update'] = True
         
+        # Определяем метод для отправки сообщения в зависимости от источника вызова
+        send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
+        
         # Запрос новой дистанции
-        await update.message.reply_text(
-            f"Начинаем обновление вашего профиля бегуна.\n"
+        await send_message(
+            f"✏️ Начинаем обновление вашего профиля бегуна.\n"
             f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
             f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
             f"Введите новую целевую дистанцию (в км):",
@@ -1121,8 +1135,14 @@ class RunnerProfileConversation:
         # Создаем обработчик для обновления профиля
         # Используем тот же класс ConversationHandler для обоих случаев (создание и обновление)
         # Отличие только в том, что для обновления используется другая точка входа
+        from telegram.ext import CallbackQueryHandler, CommandHandler
+        
         update_handler = ConversationHandler(
-            entry_points=[MessageHandler(filters.Regex(r'^✏️ Обновить мой профиль$'), self.start_update)],
+            entry_points=[
+                MessageHandler(filters.Regex(r'^✏️ Обновить мой профиль$'), self.start_update),
+                CommandHandler('update', self.start_update),
+                CallbackQueryHandler(self.start_update, pattern=r'^update_profile$')
+            ],
             states={
                 STATES['DISTANCE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_distance)],
                 STATES['COMPETITION_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_competition_date)],
