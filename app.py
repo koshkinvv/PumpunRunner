@@ -88,8 +88,8 @@ def start_bot():
         except Exception as e:
             add_log(f"Ошибка при сбросе вебхука: {e}", "WARNING")
         
-        # Используем deploy_runner.py для запуска бота
-        cmd = [sys.executable, "deploy_runner.py"]
+        # Используем bot_runner.py для запуска полной функциональности
+        cmd = [sys.executable, "bot_runner.py"]
         bot_process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
