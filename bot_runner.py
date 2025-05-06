@@ -33,6 +33,17 @@ async def main():
         except Exception as e:
             logger.warning(f"Ошибка при сбросе вебхука: {e}")
         
+        # Предварительно инициализируем БД
+        try:
+            # Импортируем app и создаем контекст приложения
+            from app import app, db
+            with app.app_context():
+                # Создаем все таблицы
+                db.create_all()
+                logger.info("База данных инициализирована в bot_runner.py")
+        except Exception as db_error:
+            logger.error(f"Ошибка при инициализации БД в bot_runner.py: {db_error}")
+            
         # Получаем настроенное приложение бота из bot_modified.py
         application = setup_bot()
         

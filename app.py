@@ -173,12 +173,12 @@ def stop_bot():
         return False
 
 
-# При запуске сервера автоматически запускаем бота
+# При запуске сервера автоматически инициализируем БД
 # Инициализация БД при запуске
 try:
+    # Создаем контекст приложения Flask
     with app.app_context():
-        from models import create_tables
-        # Используем функцию create_tables из models.py
+        # Напрямую вызываем create_all от SQLAlchemy
         db.create_all()
         add_log("База данных инициализирована при запуске")
 except Exception as e:

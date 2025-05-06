@@ -6,17 +6,15 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, 
 from sqlalchemy.sql import func
 from datetime import datetime
 
-# Функция для создания всех таблиц
+# Эта функция больше не используется, оставлена для совместимости с существующим кодом
 def create_tables():
-    """Создает все таблицы в базе данных."""
-    # Избегаем циклического импорта
-    try:
-        db.create_all()
-        return True
-    except Exception as e:
-        import logging
-        logging.error(f"Ошибка при создании таблиц: {e}")
-        return False
+    """
+    ВНИМАНИЕ: Эта функция устарела и оставлена только для обратной совместимости.
+    Вместо нее следует использовать db.create_all() с контекстом приложения Flask.
+    """
+    import logging
+    logging.warning("Функция create_tables() устарела, используйте db.create_all() в контексте приложения Flask")
+    return False
 
 # Функция для форматирования даты
 def format_date(date_obj):
