@@ -1,146 +1,117 @@
-import psycopg2
-import psycopg2.extras
-import json
+"""
+Модели базы данных для приложения.
+"""
+from app import db
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, ForeignKey
+from sqlalchemy.sql import func
 from datetime import datetime
-from config import DB_CONFIG, logging
 
-def create_tables():
-    """Create the necessary tables in the database if they don't exist."""
-    conn = None
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        cursor = conn.cursor()
-        
-        # Create users table
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            telegram_id BIGINT UNIQUE NOT NULL,
-            username VARCHAR(255),
-            first_name VARCHAR(255),
-            last_name VARCHAR(255),
-            registration_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        # Код для удаления таблицы профилей был убран, так как он приводил к потере данных
-        # Теперь профили сохраняются между перезапусками бота
-        
-        # Create runner_profiles table
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS runner_profiles (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            distance FLOAT,
-            competition_date VARCHAR(255),
-            gender VARCHAR(10),
-            age INTEGER,
-            height FLOAT,
-            weight FLOAT,
-            experience VARCHAR(255),
-            goal VARCHAR(50),
-            target_time VARCHAR(50),
-            fitness_level VARCHAR(50),
-            weekly_volume FLOAT,
-            training_start_date VARCHAR(50),
-            training_days_per_week INTEGER,
-            preferred_training_days VARCHAR(255),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        # Проверяем наличие колонок и добавляем их, если они отсутствуют
-        try:
-            # Проверяем наличие колонки training_days_per_week
-            cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='runner_profiles' AND column_name='training_days_per_week'
-            """)
-            if not cursor.fetchone():
-                cursor.execute("""
-                ALTER TABLE runner_profiles 
-                ADD COLUMN training_days_per_week INTEGER
-                """)
-                logging.info("Added column training_days_per_week to runner_profiles table")
-            
-            # Проверяем наличие колонки preferred_training_days
-            cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='runner_profiles' AND column_name='preferred_training_days'
-            """)
-            if not cursor.fetchone():
-                cursor.execute("""
-                ALTER TABLE runner_profiles 
-                ADD COLUMN preferred_training_days VARCHAR(255)
-                """)
-                logging.info("Added column preferred_training_days to runner_profiles table")
-                
-            conn.commit()
-        except Exception as e:
-            logging.error(f"Error adding columns to runner_profiles table: {e}")
-            conn.rollback()
-        
-        # Create training_plans table
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS training_plans (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            plan_name VARCHAR(255),
-            plan_description TEXT,
-            plan_data JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        # Create completed_trainings table for tracking training completion status
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS completed_trainings (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            plan_id INTEGER REFERENCES training_plans(id) ON DELETE CASCADE,
-            training_day INTEGER NOT NULL,
-            status VARCHAR(20) DEFAULT 'completed',
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        # Create user_payments table for tracking payment status
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_payments (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-            payment_agreed BOOLEAN DEFAULT FALSE,
-            payment_date TIMESTAMP,
-            expiry_date TIMESTAMP,
-            payment_amount FLOAT DEFAULT 500.0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        """)
-        
-        conn.commit()
-        logging.info("Tables created successfully")
-    except Exception as e:
-        logging.error(f"Error creating database tables: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            conn.close()
+class User(db.Model):
+    """Таблица пользователей."""
+    __tablename__ = 'users'
+    
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(Integer, unique=True, nullable=False)
+    username = Column(String(255))
+    first_name = Column(String(255))
+    last_name = Column(String(255))
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<User {self.id}: {self.telegram_id} ({self.username})>"
 
-def format_date(date_str):
-    """Convert date string to a database-friendly format."""
-    # Проверка на специальный случай "Нет конкретной даты" или "Нет"
-    if date_str == "Нет конкретной даты" or date_str == "Нет":
-        return date_str
-        
-    try:
-        date_obj = datetime.strptime(date_str, "%d.%m.%Y")
-        return date_obj.strftime("%Y-%m-%d")
-    except ValueError:
-        # If parsing fails, return the original string
-        return date_str
+
+class RunnerProfile(db.Model):
+    """Таблица профилей бегунов."""
+    __tablename__ = 'runner_profiles'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    distance = Column(Float)  # Дистанция забега
+    competition_date = Column(DateTime)  # Дата соревнования
+    gender = Column(String(10))  # Пол
+    age = Column(Integer)  # Возраст
+    height = Column(Float)  # Рост
+    weight = Column(Float)  # Вес
+    experience = Column(String(50))  # Опыт бега
+    goal = Column(String(255))  # Цель тренировок
+    target_time = Column(String(20))  # Целевое время
+    fitness_level = Column(String(50))  # Уровень физической подготовки
+    weekly_volume = Column(Float, default=0)  # Еженедельный объем бега (км)
+    training_start_date = Column(DateTime)  # Дата начала тренировок
+    training_days_per_week = Column(Integer)  # Кол-во тренировочных дней в неделю
+    preferred_training_days = Column(String(255))  # Предпочитаемые дни для тренировок
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<RunnerProfile {self.id}: User {self.user_id}, Distance {self.distance}km>"
+
+
+class PaymentStatus(db.Model):
+    """Таблица статуса оплаты."""
+    __tablename__ = 'payment_statuses'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    payment_agreed = Column(Boolean, default=False)
+    subscription_end_date = Column(DateTime)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    def __repr__(self):
+        return f"<PaymentStatus {self.id}: User {self.user_id}, Agreed: {self.payment_agreed}>"
+
+
+class TrainingPlan(db.Model):
+    """Таблица планов тренировок."""
+    __tablename__ = 'training_plans'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    plan_data = Column(Text)  # JSON-данные плана
+    created_at = Column(DateTime, default=func.now())
+    
+    def __repr__(self):
+        return f"<TrainingPlan {self.id}: User {self.user_id}>"
+
+
+class TrainingCompletion(db.Model):
+    """Таблица выполненных тренировок."""
+    __tablename__ = 'training_completions'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    training_id = Column(String(100), nullable=False)  # ID тренировки в плане
+    completed_at = Column(DateTime, default=func.now())
+    
+    def __repr__(self):
+        return f"<TrainingCompletion {self.id}: User {self.user_id}, Training {self.training_id}>"
+
+
+class TrainingCancellation(db.Model):
+    """Таблица отмененных тренировок."""
+    __tablename__ = 'training_cancellations'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    training_id = Column(String(100), nullable=False)  # ID тренировки в плане
+    cancelled_at = Column(DateTime, default=func.now())
+    
+    def __repr__(self):
+        return f"<TrainingCancellation {self.id}: User {self.user_id}, Training {self.training_id}>"
+
+class BotMetrics(db.Model):
+    """Таблица метрик работы бота."""
+    __tablename__ = 'bot_metrics'
+    
+    id = Column(Integer, primary_key=True)
+    start_time = Column(DateTime, nullable=False, default=func.now())
+    end_time = Column(DateTime)
+    uptime_seconds = Column(Integer)
+    processed_messages = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+    
+    def __repr__(self):
+        return f"<BotMetrics {self.id}: Start {self.start_time}>"

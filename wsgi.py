@@ -1,5 +1,8 @@
+"""
+WSGI entry point для Gunicorn и других WSGI серверов.
+"""
+from app import app as application
 
-from app import app
-
+# Для запуска с Gunicorn
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    application.run(host='0.0.0.0', port=5000)
