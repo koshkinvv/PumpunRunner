@@ -77,6 +77,17 @@ def start_bot():
         # Запускаем процесс бота
         add_log("Запуск бота...")
         
+        # Предварительно сбрасываем вебхук
+        try:
+            import requests
+            token = os.environ.get("TELEGRAM_TOKEN")
+            if token:
+                url = f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true"
+                response = requests.get(url, timeout=10)
+                add_log(f"Сброс вебхука: {response.text}")
+        except Exception as e:
+            add_log(f"Ошибка при сбросе вебхука: {e}", "WARNING")
+        
         # Используем deploy_runner.py для запуска бота
         cmd = [sys.executable, "deploy_runner.py"]
         bot_process = subprocess.Popen(
@@ -85,7 +96,8 @@ def start_bot():
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            universal_newlines=True
+            universal_newlines=True,
+            env=os.environ.copy()  # Явно передаем переменные окружения
         )
         
         # Обновляем статус
@@ -166,7 +178,8 @@ def stop_bot():
 try:
     with app.app_context():
         import models  # noqa
-        db.create_all()
+        # Используем функцию create_tables из models.py
+        models.create_tables()
         add_log("База данных инициализирована при запуске")
 except Exception as e:
     add_log(f"Ошибка при инициализации БД при запуске: {e}", "ERROR")

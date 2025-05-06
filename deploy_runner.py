@@ -5,6 +5,7 @@
 import os
 import sys
 import logging
+import asyncio
 import requests
 from telegram import Bot
 from telegram.ext import (
@@ -25,33 +26,44 @@ if not TELEGRAM_TOKEN:
     logger.error("TELEGRAM_TOKEN не найден!")
     sys.exit(1)
 
-# Импортируем из bot_modified.py основные функции
-try:
-    from bot_modified import (
-        help_command, pending_trainings_command, generate_plan_command,
-        update_profile_command, callback_query_handler, handle_photo, text_message_handler
+# Определяем собственные базовые функции
+async def help_command(update, context):
+    """Handler for the /help command."""
+    await update.message.reply_text(
+        "🏃‍♂️ <b>Доступные команды</b>:\n\n"
+        "/start - Начать работу с ботом\n"
+        "/help - Показать это сообщение\n"
+        "/status - Проверить статус бота\n\n"
+        "🚧 <i>Остальные команды находятся в разработке</i>",
+        parse_mode="HTML"
     )
-    logger.info("Импортированы функции из bot_modified.py")
-except ImportError as e:
-    logger.error(f"Ошибка импорта из bot_modified.py: {e}")
-    # Резервные базовые функции
-    async def help_command(update, context):
-        """Handler for the /help command."""
-        await update.message.reply_text("Справка: доступны команды /start и /help")
-    
-    pending_trainings_command = help_command
-    generate_plan_command = help_command
-    update_profile_command = help_command
-    
-    async def callback_query_handler(update, context):
-        await update.callback_query.answer("Функция в разработке")
-    
-    async def handle_photo(update, context):
-        await update.message.reply_text("Анализ фотографий в разработке")
-    
-    async def text_message_handler(update, context):
-        await update.message.reply_text("Пожалуйста, используйте команды для взаимодействия с ботом")
 
+async def pending_trainings_command(update, context):
+    """Handler for the pending trainings command."""
+    await update.message.reply_text("Список ожидающих тренировок в разработке")
+
+async def generate_plan_command(update, context):
+    """Handler for the plan generation command."""
+    await update.message.reply_text("Генерация плана в разработке")
+
+async def update_profile_command(update, context):
+    """Handler for the update profile command."""
+    await update.message.reply_text("Обновление профиля в разработке")
+
+async def callback_query_handler(update, context):
+    """Handler for inline buttons."""
+    await update.callback_query.answer("Функция в разработке")
+
+async def handle_photo(update, context):
+    """Handler for photos."""
+    await update.message.reply_text("Анализ фотографий в разработке")
+
+async def text_message_handler(update, context):
+    """Handler for text messages."""
+    await update.message.reply_text(
+        "Пожалуйста, используйте команды для взаимодействия с ботом.\n"
+        "Отправьте /help для получения списка доступных команд."
+    )
 
 async def start(update, context):
     """Обработчик команды /start."""
@@ -73,6 +85,15 @@ async def status_command(update, context):
     await update.message.reply_text("Бот работает в рамках веб-сервиса Replit Deployments")
 
 
+async def initialize_bot():
+    """Инициализация бота."""
+    # Создаем и инициализируем бота
+    bot = Bot(token=TELEGRAM_TOKEN)
+    # Явно вызываем initialize для предотвращения ошибки
+    await bot.initialize()
+    return bot
+
+
 def main():
     """Запуск бота напрямую"""
     logger.info("====== ЗАПУСК БОТА ======")
@@ -88,12 +109,14 @@ def main():
     except Exception as e:
         logger.error(f"Ошибка сброса вебхука: {e}")
     
+    # Создаем цикл событий для асинхронной инициализации
+    loop = asyncio.get_event_loop()
     try:
-        # Проверка соединения с API
-        bot = Bot(token=TELEGRAM_TOKEN)
-        logger.info(f"Бот подключен: {bot.username}")
+        # Инициализируем бота асинхронно
+        bot = loop.run_until_complete(initialize_bot())
+        logger.info(f"Бот успешно инициализирован: @{bot.username}")
     except Exception as e:
-        logger.error(f"Ошибка подключения к Telegram API: {e}")
+        logger.error(f"Ошибка инициализации бота: {e}")
         sys.exit(1)
     
     # Создание приложения

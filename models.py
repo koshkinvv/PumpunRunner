@@ -6,6 +6,14 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, 
 from sqlalchemy.sql import func
 from datetime import datetime
 
+# Функция для создания всех таблиц
+def create_tables():
+    """Создает все таблицы в базе данных."""
+    from app import app
+    with app.app_context():
+        db.create_all()
+        return True
+
 class User(db.Model):
     """Таблица пользователей."""
     __tablename__ = 'users'
