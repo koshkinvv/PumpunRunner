@@ -505,7 +505,51 @@ class RunnerProfileConversation:
         
         context.user_data['profile_data']['fitness_level'] = text
         
-        # Добавляем стандартные варианты объемов бега
+        # Добавляем варианты комфортного пэйса для бега
+        reply_markup = ReplyKeyboardMarkup(
+            [
+                ['4:30 - 5:30'],
+                ['5:30 - 6:30'],
+                ['6:30 - 7:00'],
+                ['7+'],
+                ['Не знаю']
+            ],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+        
+        await update.message.reply_text(
+            "В каком пэйсе тебе комфортно бегать и поддерживать разговор? Ответ будет учтен при генерации плана тренировок.",
+            reply_markup=reply_markup
+        )
+        return STATES['COMFORTABLE_PACE']
+    
+    async def collect_comfortable_pace(self, update: Update, context: CallbackContext):
+        """Collect comfortable running pace for conversation."""
+        text = update.message.text.strip()
+        valid_paces = ['4:30 - 5:30', '5:30 - 6:30', '6:30 - 7:00', '7+', 'Не знаю']
+        
+        if text not in valid_paces:
+            reply_markup = ReplyKeyboardMarkup(
+                [
+                    ['4:30 - 5:30'],
+                    ['5:30 - 6:30'],
+                    ['6:30 - 7:00'],
+                    ['7+'],
+                    ['Не знаю']
+                ],
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+            await update.message.reply_text(
+                "Пожалуйста, выберите один из предложенных вариантов пэйса.",
+                reply_markup=reply_markup
+            )
+            return STATES['COMFORTABLE_PACE']
+        
+        context.user_data['profile_data']['comfortable_pace'] = text
+        
+        # Переходим к следующему вопросу о еженедельном объеме бега
         reply_markup = ReplyKeyboardMarkup(
             [
                 ['0-10'],
@@ -522,7 +566,7 @@ class RunnerProfileConversation:
             reply_markup=reply_markup
         )
         return STATES['WEEKLY_VOLUME']
-    
+        
     async def collect_weekly_volume(self, update: Update, context: CallbackContext):
         """Collect and validate weekly running volume."""
         text = update.message.text.strip()
@@ -927,6 +971,7 @@ class RunnerProfileConversation:
             
         summary += (
             f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
+            f"🏃‍♂️ Комфортный пэйс: {profile['comfortable_pace']}\n"
             f"📊 Еженедельный объем: {profile['weekly_volume_text']} км\n"
             f"🗓️ Количество тренировок в неделю: {profile['training_days_per_week']}\n"
             f"📆 Предпочитаемые дни тренировок: {profile['preferred_training_days']}\n\n"
@@ -1061,6 +1106,7 @@ class RunnerProfileConversation:
                 STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
+                STATES['COMFORTABLE_PACE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_comfortable_pace)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
                 STATES['TRAINING_DAYS_PER_WEEK']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_days_per_week)],
@@ -1087,6 +1133,7 @@ class RunnerProfileConversation:
                 STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
                 STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
+                STATES['COMFORTABLE_PACE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_comfortable_pace)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
                 STATES['TRAINING_DAYS_PER_WEEK']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_days_per_week)],

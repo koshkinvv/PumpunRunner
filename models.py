@@ -63,6 +63,7 @@ class RunnerProfile(db.Model):
     goal = Column(String(255))  # Цель тренировок
     target_time = Column(String(20))  # Целевое время
     fitness_level = Column(String(50))  # Уровень физической подготовки
+    comfortable_pace = Column(String(20))  # Комфортный пэйс для бега с разговором
     weekly_volume = Column(Float, default=0)  # Еженедельный объем бега (км)
     training_start_date = Column(DateTime)  # Дата начала тренировок
     training_days_per_week = Column(Integer)  # Кол-во тренировочных дней в неделю

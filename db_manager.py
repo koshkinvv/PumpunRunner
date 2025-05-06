@@ -132,6 +132,7 @@ class DBManager:
                         goal = %(goal)s,
                         target_time = %(target_time)s,
                         fitness_level = %(fitness_level)s,
+                        comfortable_pace = %(comfortable_pace)s,
                         weekly_volume = %(weekly_volume)s,
                         training_start_date = %(training_start_date)s,
                         training_days_per_week = %(training_days_per_week)s,
@@ -146,12 +147,12 @@ class DBManager:
                     INSERT INTO runner_profiles (
                         user_id, distance, competition_date, gender, age, 
                         height, weight, experience, goal, target_time, 
-                        fitness_level, weekly_volume, training_start_date,
+                        fitness_level, comfortable_pace, weekly_volume, training_start_date,
                         training_days_per_week, preferred_training_days
                     ) VALUES (
                         %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
                         %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
-                        %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s,
+                        %(fitness_level)s, %(comfortable_pace)s, %(weekly_volume)s, %(training_start_date)s,
                         %(training_days_per_week)s, %(preferred_training_days)s
                     )
                     """
@@ -332,6 +333,7 @@ class DBManager:
                     "goal": "Улучшить время",
                     "target_time": "00:45:00",
                     "fitness_level": "Средний",
+                    "comfortable_pace": "6:30 - 7:00",  # Комфортный пэйс для бега с разговором
                     "weekly_volume": "15",
                     "training_start_date": datetime.now().strftime("%Y-%m-%d"),
                     "training_days_per_week": "3",
@@ -343,12 +345,12 @@ class DBManager:
                 INSERT INTO runner_profiles (
                     user_id, distance, competition_date, gender, age, 
                     height, weight, experience, goal, target_time, 
-                    fitness_level, weekly_volume, training_start_date,
+                    fitness_level, comfortable_pace, weekly_volume, training_start_date,
                     training_days_per_week, preferred_training_days
                 ) VALUES (
                     %(user_id)s, %(distance)s, %(competition_date)s, %(gender)s, %(age)s,
                     %(height)s, %(weight)s, %(experience)s, %(goal)s, %(target_time)s,
-                    %(fitness_level)s, %(weekly_volume)s, %(training_start_date)s,
+                    %(fitness_level)s, %(comfortable_pace)s, %(weekly_volume)s, %(training_start_date)s,
                     %(training_days_per_week)s, %(preferred_training_days)s
                 ) RETURNING *
                 """
