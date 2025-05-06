@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger('start_bot_directly')
 
-def cleanup_telegram_session():
+async def cleanup_telegram_session():
     """Сброс сессии Telegram API"""
     try:
         token = os.getenv('TELEGRAM_TOKEN')
@@ -34,17 +34,17 @@ def cleanup_telegram_session():
             
         bot = Bot(token=token)
         # Удаляем вебхук
-        result = bot.delete_webhook()
+        result = await bot.delete_webhook()
         logger.info(f"Удаление вебхука: {result}")
         
         # Сброс обновлений с разными offset
         for offset in [10, 20, 30]:
             try:
-                status = bot.get_updates(offset=offset, timeout=1)
+                status = await bot.get_updates(offset=offset, timeout=1)
                 logger.info(f"Сброс с offset={offset}: {status.status_code if hasattr(status, 'status_code') else 200}")
             except TelegramError as e:
                 logger.warning(f"Ошибка при сбросе обновлений (offset={offset}): {e}")
-            time.sleep(2)
+            await asyncio.sleep(2)
     except Exception as e:
         logger.error(f"Ошибка при очистке сессии Telegram: {e}")
 
@@ -63,7 +63,7 @@ def kill_other_bots():
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
-def main():
+async def main():
     """Основная функция запуска"""
     logger.info("=" * 50)
     logger.info("ПРЯМОЙ ЗАПУСК БОТА ДЛЯ WORKFLOW")
@@ -75,7 +75,7 @@ def main():
         
         # Очищаем сессию Telegram
         logger.info("Сброс сессии Telegram API...")
-        cleanup_telegram_session()
+        await cleanup_telegram_session()
         
         # Настраиваем и запускаем бота
         logger.info("Настройка бота...")
@@ -92,4 +92,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
