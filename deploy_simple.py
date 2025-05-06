@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """
-Минимальный скрипт для запуска бота в Replit Deployments.
+Самый простой скрипт для запуска бота в Replit Deployments.
+Использует bot.py вместо bot_modified.py
 """
-from bot_modified import setup_bot
+from bot import setup_bot
 
 def main():
     """Запуск бота напрямую"""
