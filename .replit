@@ -21,9 +21,8 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "python simple_worker.py"]
+run = ["sh", "-c", "python app.py "]
 deploymentTarget = "gce"
-ignorePorts = true
 
 [webview]
 path = "/"
