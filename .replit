@@ -22,8 +22,9 @@ PATH = "${PATH}:${HOME}/workspace/.pythonlibs/bin"
 PYTHONPATH = "${PYTHONPATH}:${HOME}/workspace"
 
 [deployment]
-run = ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --reuse-port --reload main:app"]
-deploymentTarget = "cloudrun"
+run = ["sh", "-c", "python deploy_bot.py"]
+deploymentTarget = "gce"
+ignorePorts = true
 
 [webview]
 path = "/"
