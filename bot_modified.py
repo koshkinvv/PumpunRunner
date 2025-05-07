@@ -385,63 +385,62 @@ async def update_profile_command(update, context):
     """Handler for the /update command - starts runner profile update dialog."""
     user = update.effective_user
     telegram_id = user.id
+    logging.info(f"Начато обновление профиля для пользователя {telegram_id}")
 
     # Проверяем наличие пользователя в БД
     db_user_id = DBManager.get_user_id(telegram_id)
 
     if not db_user_id:
         # Пользователь еще не зарегистрирован
-        await update.message.reply_text(
-            "Похоже, вы еще не создали профиль бегуна. Используйте команду /start, чтобы начать."
-        )
+        message_text = "Похоже, вы еще не создали профиль бегуна. Используйте команду /start, чтобы начать."
+        if hasattr(update, 'callback_query'):
+            await update.callback_query.message.reply_text(message_text)
+            await update.callback_query.answer()
+        else:
+            await update.message.reply_text(message_text)
         return
 
-    # Создаем объект для работы с профилем и запускаем процесс обновления
+    # Создаем объект для работы с профилем
     from conversation import RunnerProfileConversation
     profile_conv = RunnerProfileConversation()
 
-    # Инициализируем обновление профиля
-    if hasattr(update, 'callback_query'):
-        # Если метод вызван из callback_query_handler, сначала отправляем сообщение
-        # через callback_query.message, и используем его как основу для диалога
-        # Сначала отправляем сообщение через callback_query.message
-        await update.callback_query.message.reply_text(
-            "✏️ Давайте обновим ваш профиль бегуна. "
-            "Я буду задавать вопросы, а вы отвечайте на них.\n\n"
-            "Вы можете отменить процесс в любой момент, отправив команду /cancel."
-        )
-
-        # Создаем новый Update объект, который имитирует сообщение
-        # Это необходимо, так как start_update ожидает update.message
-        from telegram import Update as TelegramUpdate
-        from telegram import Message, Chat, User
-
-        # Получаем оригинальное сообщение из callback_query
-        orig_message = update.callback_query.message
-
-        # Создаем новый объект Message
-        new_message = Message(
-            message_id=orig_message.message_id,
-            date=orig_message.date,
-            chat=orig_message.chat,
-            from_user=update.effective_user,  # Используем пользователя из оригинального update
-            text="/update",  # Имитируем команду /update
-            bot=orig_message.bot
-        )
-
-        # Создаем новый объект Update
-        new_update = TelegramUpdate(
-            update_id=update.update_id,
-            message=new_message
-        )
-
-        # Запускаем диалог обновления профиля с новым объектом Update
-        await profile_conv.start_update(new_update, context)
-    else:
-        # Если метод вызван из команды
-        await profile_conv.start_update(update, context)
-
-    # После вызова start_update соответствующий ConversationHandler обработает последующие сообщения
+    try:
+        # Инициализируем обновление профиля с учетом источника вызова
+        if hasattr(update, 'callback_query'):
+            # Отправляем сообщение о начале обновления профиля
+            sent_message = await update.callback_query.message.reply_text(
+                "✏️ Давайте обновим ваш профиль бегуна. "
+                "Я буду задавать вопросы, а вы отвечайте на них.\n\n"
+                "Вы можете отменить процесс в любой момент, отправив команду /cancel."
+            )
+            
+            # Отвечаем на callback, чтобы пользователь видел, что кнопка была нажата
+            await update.callback_query.answer()
+            
+            # Сохраняем информацию о том, что идет обновление профиля
+            context.user_data['profile_update_in_progress'] = True
+            
+            # Запускаем диалог обновления профиля напрямую
+            # Передаем флаг is_callback=True, чтобы обработать правильно
+            await profile_conv.start_update(update, context)
+        else:
+            # Если вызвано из текстовой команды
+            await profile_conv.start_update(update, context)
+        
+        logging.info(f"Запущен диалог обновления профиля для пользователя {telegram_id}")
+    except Exception as e:
+        # Логируем ошибку и информируем пользователя
+        logging.error(f"Ошибка при запуске обновления профиля: {e}")
+        error_text = "Произошла ошибка при запуске обновления профиля. Пожалуйста, попробуйте позже."
+        
+        if hasattr(update, 'callback_query'):
+            await update.callback_query.message.reply_text(error_text)
+        else:
+            await update.message.reply_text(error_text)
+            
+        # Очищаем все временные данные о процессе
+        if 'profile_update_in_progress' in context.user_data:
+            del context.user_data['profile_update_in_progress']
 
 async def callback_query_handler(update, context):
     """Handler for inline button callbacks."""
@@ -454,6 +453,78 @@ async def callback_query_handler(update, context):
     # Запоминаем callback_data для возможного восстановления после выполнения действия
     original_callback_data = query.data
     context.user_data['last_callback'] = original_callback_data
+    
+    # Проверяем, не является ли это выбором марафона
+    if query.data == "select_marathon":
+        # Импортируем функцию для выбора марафона
+        from marathon_utils import get_marathons_list
+        
+        # Получаем список марафонов
+        marathons = get_marathons_list()
+        
+        # Создаем клавиатуру с марафонами
+        keyboard = []
+        for i, marathon in enumerate(marathons[:10]):  # Показываем только первые 10 марафонов
+            # Формируем callback_data в формате: set_marathon_YYYY-MM-DD
+            callback_data = f"set_marathon_{marathon['Дата']}"
+            # Добавляем кнопку с названием и датой марафона
+            button = InlineKeyboardButton(
+                f"{marathon['Название']} ({marathon['Дата']})", 
+                callback_data=callback_data
+            )
+            keyboard.append([button])
+        
+        # Добавляем кнопку отмены
+        keyboard.append([InlineKeyboardButton("Отмена", callback_data="cancel_marathon_selection")])
+        
+        # Создаем разметку клавиатуры
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Отправляем сообщение с выбором марафона
+        await query.message.reply_text(
+            "Выберите марафон из списка:",
+            reply_markup=reply_markup
+        )
+        return
+        
+    # Проверяем, не является ли это выбором даты марафона
+    if query.data.startswith("set_marathon_"):
+        # Извлекаем дату из callback_data
+        date_str = query.data.replace("set_marathon_", "")
+        
+        # Получаем профиль пользователя
+        profile = DBManager.get_runner_profile(db_user_id)
+        if not profile:
+            await query.message.reply_text(
+                "❌ Не удалось найти ваш профиль. "
+                "Пожалуйста, создайте профиль заново."
+            )
+            return
+            
+        # Обновляем дату соревнования в профиле
+        profile["competition_date"] = date_str
+        DBManager.save_runner_profile(db_user_id, profile)
+        
+        # Отправляем сообщение об успешном обновлении
+        await query.message.reply_text(
+            f"✅ Дата соревнования успешно обновлена на {date_str}."
+        )
+        
+        # Показываем главное меню
+        await send_main_menu(update, context, 
+            "Теперь вы можете получить персонализированный план тренировок, основанный на вашем профиле."
+        )
+        return
+        
+    # Проверяем, не является ли это отменой выбора марафона
+    if query.data == "cancel_marathon_selection":
+        await query.message.reply_text(
+            "Выбор марафона отменен. Вы можете обновить дату соревнования позже через меню обновления профиля."
+        )
+        
+        # Показываем главное меню
+        await send_main_menu(update, context, "Что вы хотите сделать?")
+        return
 
     # Обработка кнопок подтверждения создания нового плана
     if query.data == "confirm_new_plan" or query.data == "new_plan":

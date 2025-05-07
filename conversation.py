@@ -34,55 +34,107 @@ class RunnerProfileConversation:
         # Проверяем, вызван ли метод из callback_query
         is_callback = hasattr(update, 'callback_query')
         
+        # Добавляем логирование
+        logging.info(f"Запуск обновления профиля для пользователя {telegram_id}, is_callback={is_callback}")
+        
         # Получаем id пользователя в БД
         db_user_id = DBManager.get_user_id(telegram_id)
         if not db_user_id:
-            # Определяем метод для отправки сообщения в зависимости от источника вызова
-            send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
-            await send_message(
-                "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
-            )
+            # Формируем сообщение об ошибке
+            error_text = "⚠️ Сначала нужно создать профиль бегуна. Используйте команду /start."
+            
+            # Отправляем сообщение в зависимости от источника вызова
+            if is_callback:
+                await update.callback_query.message.reply_text(error_text)
+                # Отвечаем на callback, чтобы пользователь видел, что кнопка обработана
+                await update.callback_query.answer()
+            else:
+                await update.message.reply_text(error_text)
+                
             return ConversationHandler.END
         
         # Получаем текущий профиль бегуна
         runner_profile = DBManager.get_runner_profile(db_user_id)
         if not runner_profile:
-            # Определяем метод для отправки сообщения в зависимости от источника вызова
-            send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
-            await send_message(
-                "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
-            )
+            # Формируем сообщение об ошибке
+            error_text = "⚠️ У вас еще нет профиля бегуна. Создайте его с помощью команды /start."
+            
+            # Отправляем сообщение в зависимости от источника вызова
+            if is_callback:
+                await update.callback_query.message.reply_text(error_text)
+                # Отвечаем на callback, чтобы пользователь видел, что кнопка обработана
+                await update.callback_query.answer()
+            else:
+                await update.message.reply_text(error_text)
+                
             return ConversationHandler.END
         
-        # Если метод вызван из callback_query, отвечаем на callback
-        if is_callback:
-            await update.callback_query.answer()
-        
-        # Начинаем диалог обновления профиля с первого шага - дистанции
-        # Показываем текущее значение для каждого поля
-        context.user_data['db_user_id'] = db_user_id
-        context.user_data['profile_data'] = {}
-        
-        # Добавляем информацию, что это обновление существующего профиля
-        context.user_data['is_profile_update'] = True
-        
-        # Определяем метод для отправки сообщения в зависимости от источника вызова
-        send_message = update.callback_query.message.reply_text if is_callback else update.message.reply_text
-        
-        # Запрос новой дистанции
-        await send_message(
-            f"✏️ Начинаем обновление вашего профиля бегуна.\n"
-            f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
-            f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
-            f"Введите новую целевую дистанцию (в км):",
-            reply_markup=ReplyKeyboardMarkup(
+        try:
+            # Если метод вызван из callback_query, отвечаем на callback
+            if is_callback:
+                await update.callback_query.answer()
+            
+            # Начинаем диалог обновления профиля с первого шага - дистанции
+            # Очищаем имеющиеся данные профиля в user_data, чтобы начать с чистого листа
+            context.user_data['db_user_id'] = db_user_id
+            context.user_data['profile_data'] = {}
+            
+            # Добавляем информацию, что это обновление существующего профиля
+            context.user_data['is_profile_update'] = True
+            
+            # Формируем текст сообщения с информацией о текущих значениях
+            message_text = (
+                f"✏️ Начинаем обновление вашего профиля бегуна.\n"
+                f"Вы можете отменить процесс в любой момент, отправив /cancel.\n\n"
+                f"Текущая дистанция: {runner_profile.get('distance', 'Не указано')} км\n"
+                f"Введите новую целевую дистанцию (в км):"
+            )
+            
+            # Создаем клавиатуру для выбора дистанции
+            reply_markup = ReplyKeyboardMarkup(
                 [['5', '10'], ['21', '42']], 
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
-        )
-        
-        return STATES['DISTANCE']
+            
+            # Отправляем сообщение в зависимости от источника вызова
+            if is_callback:
+                # Для callback используем сообщение из callback_query
+                await update.callback_query.message.reply_text(
+                    message_text,
+                    reply_markup=reply_markup
+                )
+            else:
+                # Для обычного сообщения используем update.message
+                await update.message.reply_text(
+                    message_text,
+                    reply_markup=reply_markup
+                )
+            
+            # Логируем успешный старт диалога
+            logging.info(f"Успешно запущен диалог обновления профиля для пользователя {telegram_id}")
+            
+            # Переходим к первому шагу диалога
+            return STATES['DISTANCE']
+            
+        except Exception as e:
+            # Обрабатываем ошибки для обеспечения устойчивости
+            logging.error(f"Ошибка при запуске диалога обновления профиля: {e}")
+            
+            # Формируем сообщение об ошибке
+            error_text = "❌ Произошла ошибка при обновлении профиля. Пожалуйста, попробуйте позже."
+            
+            # Отправляем сообщение в зависимости от источника вызова
+            if is_callback:
+                await update.callback_query.message.reply_text(error_text)
+            else: 
+                await update.message.reply_text(error_text)
+                
+            # Очищаем временные данные о профиле
+            if 'is_profile_update' in context.user_data:
+                del context.user_data['is_profile_update']
+                
+            return ConversationHandler.END
     
     async def start(self, update: Update, context: CallbackContext):
         """Start the conversation and save user information."""
@@ -154,17 +206,18 @@ class RunnerProfileConversation:
             
             context.user_data['profile_data']['distance'] = distance
             
-            # Добавляем кнопку "Нет" для выбора
+            # Добавляем кнопки "Нет" и "Не знаю" для выбора
             reply_markup = ReplyKeyboardMarkup(
-                [['Нет']],
+                [['Нет'], ['Не знаю']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             
             await update.message.reply_text(
                 f"Отлично! Вы планируете пробежать {distance} км.\n\n"
-                "Когда у вас соревнование? Пожалуйста, введите дату в формате ДД.ММ.ГГГГ "
-                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                "Когда у вас соревнование? Пожалуйста, введите дату в формате ДД.ММ.ГГГГ, "
+                "выберите 'Нет', если у вас нет конкретной даты соревнования, "
+                "или 'Не знаю', если хотите получить список ближайших марафонов.",
                 reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
@@ -195,6 +248,26 @@ class RunnerProfileConversation:
                 reply_markup=reply_markup
             )
             return STATES['GENDER']
+            
+        # Обработка варианта "Не знаю" - пользователь хочет получить список марафонов
+        if text == 'Не знаю':
+            # Устанавливаем флаг для последующего напоминания о показе списка марафонов
+            context.user_data['profile_data']['competition_date'] = 'Не знаю'
+            context.user_data['show_marathons_after_profile'] = True
+            
+            # Ask for gender with keyboard
+            reply_markup = ReplyKeyboardMarkup(
+                [['Мужской', 'Женский']], 
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+            
+            await update.message.reply_text(
+                "Хорошо! После создания профиля я предложу вам список ближайших марафонов.\n\n"
+                "А сейчас, укажите ваш пол:",
+                reply_markup=reply_markup
+            )
+            return STATES['GENDER']
         
         # Validate date format
         date_pattern = r'^(\d{1,2})\.(\d{1,2})\.(\d{4})$'
@@ -202,13 +275,14 @@ class RunnerProfileConversation:
         
         if not match:
             reply_markup = ReplyKeyboardMarkup(
-                [['Нет']],
+                [['Нет'], ['Не знаю']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 25.12.2023) "
-                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                "Пожалуйста, введите дату в формате ДД.ММ.ГГГГ (например, 25.12.2023), "
+                "выберите 'Нет', если у вас нет конкретной даты соревнования, "
+                "или 'Не знаю', если хотите получить список ближайших марафонов.",
                 reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
@@ -221,13 +295,14 @@ class RunnerProfileConversation:
             
             if date_obj < today:
                 reply_markup = ReplyKeyboardMarkup(
-                    [['Нет']],
+                    [['Нет'], ['Не знаю']],
                     one_time_keyboard=True,
                     resize_keyboard=True
                 )
                 await update.message.reply_text(
-                    "Дата соревнования должна быть в будущем. Пожалуйста, введите корректную дату "
-                    "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                    "Дата соревнования должна быть в будущем. Пожалуйста, введите корректную дату, "
+                    "выберите 'Нет', если у вас нет конкретной даты соревнования, "
+                    "или 'Не знаю', если хотите получить список ближайших марафонов.",
                     reply_markup=reply_markup
                 )
                 return STATES['COMPETITION_DATE']
@@ -249,13 +324,14 @@ class RunnerProfileConversation:
             
         except ValueError:
             reply_markup = ReplyKeyboardMarkup(
-                [['Нет']],
+                [['Нет'], ['Не знаю']],
                 one_time_keyboard=True,
                 resize_keyboard=True
             )
             await update.message.reply_text(
-                "Пожалуйста, введите корректную дату в формате ДД.ММ.ГГГГ "
-                "или выберите 'Нет', если у вас нет конкретной даты соревнования.",
+                "Пожалуйста, введите корректную дату в формате ДД.ММ.ГГГГ, "
+                "выберите 'Нет', если у вас нет конкретной даты соревнования, "
+                "или 'Не знаю', если хотите получить список ближайших марафонов.",
                 reply_markup=reply_markup
             )
             return STATES['COMPETITION_DATE']
@@ -1038,6 +1114,38 @@ class RunnerProfileConversation:
                         reply_markup=reply_markup
                     )
                     
+                    # Проверяем, нужно ли показать список марафонов
+                    show_marathons = context.user_data.get('show_marathons_after_profile', False)
+                    
+                    if show_marathons:
+                        # Импортируем функцию для работы с марафонами
+                        from marathon_utils import get_marathon_message_text
+                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                        
+                        # Создаем клавиатуру с кнопкой выбора марафона
+                        reply_markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("Выбрать один из марафонов", callback_data="select_marathon")]
+                        ])
+                        
+                        # Отправляем сообщение с информацией о марафонах
+                        await update.message.reply_text(
+                            "🎉 Отлично! Ваш профиль бегуна успешно создан.\n\n"
+                            "Вы указали, что не знаете дату соревнования. Вот список ближайших марафонов:",
+                            reply_markup=ReplyKeyboardRemove()
+                        )
+                        
+                        # Отправляем список марафонов
+                        marathon_message = get_marathon_message_text()
+                        await update.message.reply_text(
+                            marathon_message,
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                        
+                        # Очищаем флаг, чтобы не показывать список повторно
+                        if 'show_marathons_after_profile' in context.user_data:
+                            del context.user_data['show_marathons_after_profile']
+                    
                     # Сохраняем состояние - ожидаем ответа на вопрос об оплате
                     context.user_data['awaiting_payment_confirmation'] = True
                     return ConversationHandler.END
@@ -1048,6 +1156,36 @@ class RunnerProfileConversation:
                         "Спасибо за предоставленную информацию!",
                         reply_markup=ReplyKeyboardRemove()
                     )
+                    
+                    # Проверяем, нужно ли показать список марафонов
+                    show_marathons = context.user_data.get('show_marathons_after_profile', False)
+                    
+                    if show_marathons:
+                        # Импортируем функцию для работы с марафонами
+                        from marathon_utils import get_marathon_message_text
+                        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                        
+                        # Создаем клавиатуру с кнопкой выбора марафона
+                        reply_markup = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("Выбрать один из марафонов", callback_data="select_marathon")]
+                        ])
+                        
+                        # Отправляем сообщение с информацией о марафонах
+                        await update.message.reply_text(
+                            "Вы указали, что не знаете дату соревнования. Вот список ближайших марафонов:",
+                        )
+                        
+                        # Отправляем список марафонов
+                        marathon_message = get_marathon_message_text()
+                        await update.message.reply_text(
+                            marathon_message,
+                            reply_markup=reply_markup,
+                            parse_mode="Markdown"
+                        )
+                        
+                        # Очищаем флаг, чтобы не показывать список повторно
+                        if 'show_marathons_after_profile' in context.user_data:
+                            del context.user_data['show_marathons_after_profile']
                     
                     # Импортируем функцию для отображения главного меню
                     from bot_modified import send_main_menu
