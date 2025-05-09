@@ -5,9 +5,6 @@ modules = ["postgresql-16", "python-3.11"]
 [interpreter]
 command = ["python3", "-u", "main.py"]
 
-[languages.python3.languageServer]
-start = ["pylsp"]
-
 [nix]
 channel = "stable-23_11"
 
