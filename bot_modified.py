@@ -58,6 +58,7 @@ def format_weekly_volume(volume, default_value="0"):
 def format_training_day(day, training_day_num):
     """
     Форматирует день тренировки для отображения в более подробном виде.
+    Поддерживает как старый, так и новый формат данных тренировки.
     
     Args:
         day: Словарь с данными о дне тренировки
@@ -66,49 +67,135 @@ def format_training_day(day, training_day_num):
     Returns:
         str: Отформатированное сообщение о дне тренировки
     """
-    # Проверяем наличие heart_rate в данных дня тренировки
+    # Базовые данные, которые должны быть в любом случае
+    day_date = day.get('date', 'Дата не указана')
+    day_name = day.get('day', 'День не указан')
+    training_type = day.get('training_type', 'Тип не указан')
+    distance = day.get('distance', 'Дистанция не указана')
+    pace = day.get('pace', 'Темп не указан')
+    
+    # Дополнительные данные, которые могут быть в расширенном формате
     heart_rate = day.get('heart_rate', '')
     heart_rate_text = f"\nПульс: {heart_rate}" if heart_rate else ""
     
-    # Формируем подробное описание тренировки
     description = day.get('description', '')
     purpose = day.get('purpose', '')
     
-    # Разделяем описание на части (если возможно)
-    description_parts = []
+    # Создадим новый улучшенный формат для любого плана
+    structured_description = ""
     
-    # Пытаемся извлечь части из описания
-    if "Разминка:" in description:
-        warmup = description.split("Разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("Разминка:")[1].strip()
-        description_parts.append(f"Разминка: {warmup}")
-    
-    if "Основная часть:" in description:
-        main_part = description.split("Основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("Основная часть:")[1].strip()
-        description_parts.append(f"Основная часть: {main_part}")
-    
-    if "Заминка:" in description:
-        cooldown = description.split("Заминка:")[1].strip()
-        description_parts.append(f"Заминка: {cooldown}")
+    # Проверяем, есть ли уже структурированное описание
+    if "Разминка:" in description or "Основная часть:" in description or "Заминка:" in description:
+        # План уже имеет структурированное описание, используем его
+        description_parts = []
         
-    # Если не удалось разделить, используем всё описание как есть
-    if not description_parts:
-        description_parts.append(description)
+        # Извлекаем разминку
+        if "Разминка:" in description:
+            warmup = description.split("Разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("Разминка:")[1].strip()
+            description_parts.append(f"Разминка: {warmup}")
+        
+        # Извлекаем основную часть
+        if "Основная часть:" in description:
+            main_part = description.split("Основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("Основная часть:")[1].strip()
+            description_parts.append(f"Основная часть: {main_part}")
+        
+        # Извлекаем заминку
+        if "Заминка:" in description:
+            cooldown = description.split("Заминка:")[1].strip()
+            description_parts.append(f"Заминка: {cooldown}")
+        
+        structured_description = "\n\n".join(description_parts)
+    else:
+        # Это простое описание, преобразуем его в структурированное на основе некоторых ключевых слов
+        # и эвристики о том, как обычно строятся тренировки
+        
+        # Ищем признаки разминки в описании
+        warmup_indicators = ["разминка", "разогрев", "начните с", "начало тренировки"]
+        main_indicators = ["основная часть", "затем", "главная нагрузка", "после разминки"]
+        cooldown_indicators = ["заминка", "остывание", "закончите", "в конце", "завершите"]
+        
+        # Разбиваем описание на предложения
+        sentences = [s.strip() for s in description.replace('. ', '.|').replace('! ', '!|').replace('? ', '?|').split('|') if s.strip()]
+        
+        # Категоризируем предложения
+        warmup_sentences = []
+        main_sentences = []
+        cooldown_sentences = []
+        uncategorized = []
+        
+        # Простой алгоритм категоризации
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            
+            if any(indicator in sentence_lower for indicator in warmup_indicators):
+                warmup_sentences.append(sentence)
+            elif any(indicator in sentence_lower for indicator in cooldown_indicators):
+                cooldown_sentences.append(sentence)
+            elif any(indicator in sentence_lower for indicator in main_indicators) or "интервал" in sentence_lower or "темп" in sentence_lower:
+                main_sentences.append(sentence)
+            else:
+                # Если не можем определить категорию, добавим в некатегоризованные
+                uncategorized.append(sentence)
+        
+        # Если не нашли категоризованные предложения, используем эвристику:
+        # Если есть хотя бы 3 предложения, первое - разминка, последнее - заминка,
+        # все между - основная часть
+        if not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) >= 3:
+            warmup_sentences = [sentences[0]]
+            cooldown_sentences = [sentences[-1]]
+            main_sentences = sentences[1:-1]
+            uncategorized = []
+        # Если 2 предложения - первое разминка, второе основная часть
+        elif not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) == 2:
+            warmup_sentences = [sentences[0]]
+            main_sentences = [sentences[1]]
+            cooldown_sentences = []
+            uncategorized = []
+        # Если только 1 предложение - всё основная часть
+        elif not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) == 1:
+            main_sentences = sentences
+            warmup_sentences = []
+            cooldown_sentences = []
+            uncategorized = []
+        
+        # Некатегоризованные предложения добавляем в основную часть
+        main_sentences.extend(uncategorized)
+        
+        # Составляем структурированное описание
+        description_parts = []
+        
+        if warmup_sentences:
+            description_parts.append(f"Разминка: {' '.join(warmup_sentences)}")
+        
+        if main_sentences:
+            description_parts.append(f"Основная часть: {' '.join(main_sentences)}")
+        
+        if cooldown_sentences:
+            description_parts.append(f"Заминка: {' '.join(cooldown_sentences)}")
+        
+        structured_description = "\n\n".join(description_parts)
     
-    # Добавляем цель тренировки
+    # Добавляем цель тренировки, если она указана
     if purpose:
-        description_parts.append(f"Цель: {purpose}")
+        if structured_description:
+            structured_description += f"\n\nЦель: {purpose}"
+        else:
+            structured_description = f"Цель: {purpose}"
     
-    # Финальный текст для отображения
-    formatted_description = "\n\n".join(description_parts)
+    # Если структурированного описания нет, используем исходное описание
+    if not structured_description:
+        structured_description = description
     
     # Формируем итоговое сообщение
-    return (
-        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-        f"Тип: {day['training_type']}\n"
-        f"Дистанция: {day['distance']}\n"
-        f"Темп: {day['pace']}{heart_rate_text}\n\n"
-        f"{formatted_description}"
+    formatted_message = (
+        f"*День {training_day_num}: {day_name} ({day_date})*\n"
+        f"Тип: {training_type}\n"
+        f"Дистанция: {distance}\n"
+        f"Темп: {pace}{heart_rate_text}\n\n"
+        f"{structured_description}"
     )
+    
+    return formatted_message
 
 async def help_command(update, context):
     """Handler for the /help command."""
