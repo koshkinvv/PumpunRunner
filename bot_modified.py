@@ -54,6 +54,62 @@ def format_weekly_volume(volume, default_value="0"):
     # Иначе добавляем единицу измерения
     return f"{volume} км/неделю"
 
+
+def format_training_day(day, training_day_num):
+    """
+    Форматирует день тренировки для отображения в более подробном виде.
+    
+    Args:
+        day: Словарь с данными о дне тренировки
+        training_day_num: Номер дня тренировки
+        
+    Returns:
+        str: Отформатированное сообщение о дне тренировки
+    """
+    # Проверяем наличие heart_rate в данных дня тренировки
+    heart_rate = day.get('heart_rate', '')
+    heart_rate_text = f"\nПульс: {heart_rate}" if heart_rate else ""
+    
+    # Формируем подробное описание тренировки
+    description = day.get('description', '')
+    purpose = day.get('purpose', '')
+    
+    # Разделяем описание на части (если возможно)
+    description_parts = []
+    
+    # Пытаемся извлечь части из описания
+    if "Разминка:" in description:
+        warmup = description.split("Разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("Разминка:")[1].strip()
+        description_parts.append(f"Разминка: {warmup}")
+    
+    if "Основная часть:" in description:
+        main_part = description.split("Основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("Основная часть:")[1].strip()
+        description_parts.append(f"Основная часть: {main_part}")
+    
+    if "Заминка:" in description:
+        cooldown = description.split("Заминка:")[1].strip()
+        description_parts.append(f"Заминка: {cooldown}")
+        
+    # Если не удалось разделить, используем всё описание как есть
+    if not description_parts:
+        description_parts.append(description)
+    
+    # Добавляем цель тренировки
+    if purpose:
+        description_parts.append(f"Цель: {purpose}")
+    
+    # Финальный текст для отображения
+    formatted_description = "\n\n".join(description_parts)
+    
+    # Формируем итоговое сообщение
+    return (
+        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
+        f"Тип: {day['training_type']}\n"
+        f"Дистанция: {day['distance']}\n"
+        f"Темп: {day['pace']}{heart_rate_text}\n\n"
+        f"{formatted_description}"
+    )
+
 async def help_command(update, context):
     """Handler for the /help command."""
     # Добавим проверку работы часовых поясов
@@ -141,14 +197,9 @@ async def pending_trainings_command(update, context):
                 continue
 
             has_pending_trainings = True
-
-            day_message = (
-                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                f"Тип: {day['training_type']}\n"
-                f"Дистанция: {day['distance']}\n"
-                f"Темп: {day['pace']}\n\n"
-                f"{day['description']}"
-            )
+            
+            # Используем функцию форматирования тренировочного дня
+            day_message = format_training_day(day, training_day_num)
 
             # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
@@ -351,13 +402,7 @@ async def generate_plan_command(update, context):
         # Send each training day with action buttons
         for idx, day in enumerate(plan['training_days']):
             training_day_num = idx + 1
-            day_message = (
-                f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                f"Тип: {day['training_type']}\n"
-                f"Дистанция: {day['distance']}\n"
-                f"Темп: {day['pace']}\n\n"
-                f"{day['description']}"
-            )
+            day_message = format_training_day(day, training_day_num)
 
             # Create "Выполнено" and "Отменить" buttons for each training day
             keyboard = InlineKeyboardMarkup([
@@ -1139,13 +1184,7 @@ async def callback_query_handler(update, context):
                 # Отправляем каждый день тренировки с соответствующими кнопками
                 for idx, day in enumerate(plan['training_days']):
                     training_day_num = idx + 1
-                    day_message = (
-                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {day['training_type']}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    day_message = format_training_day(day, training_day_num)
 
                     # Создаем кнопки для действий
                     keyboard = InlineKeyboardMarkup([
@@ -1269,13 +1308,7 @@ async def callback_query_handler(update, context):
                 # Отправляем каждый день тренировки с кнопками действий
                 for idx, day in enumerate(plan['training_days']):
                     training_day_num = idx + 1
-                    day_message = (
-                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {day['training_type']}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    day_message = format_training_day(day, training_day_num)
 
                     # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
                     keyboard = InlineKeyboardMarkup([
@@ -1362,14 +1395,10 @@ async def callback_query_handler(update, context):
                     # Определяем тип тренировки
                     training_type = day.get('training_type') or day.get('type', 'Не указан')
 
-                    # Формируем сообщение о дне тренировки
-                    training_message = (
-                        f"✅ *День {day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {training_type}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    # Используем функцию форматирования для согласованного вида
+                    day_message = format_training_day(day, day_num)
+                    # Добавляем иконку статуса в начало сообщения
+                    training_message = "✅ " + day_message.strip()
 
                     await query.message.reply_text(
                         training_message,
@@ -1403,14 +1432,10 @@ async def callback_query_handler(update, context):
                     # Определяем тип тренировки
                     training_type = day.get('training_type') or day.get('type', 'Не указан')
 
-                    # Формируем сообщение о дне тренировки
-                    training_message = (
-                        f"❌ *День {day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {training_type}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    # Используем функцию форматирования для согласованного вида
+                    day_message = format_training_day(day, day_num)
+                    # Добавляем иконку статуса в начало сообщения
+                    training_message = "❌ " + day_message.strip()
 
                     await query.message.reply_text(
                         training_message,
@@ -1505,11 +1530,12 @@ async def callback_query_handler(update, context):
                     diff_percent = abs(workout_distance - planned_distance) / planned_distance * 100
                     logging.info(f"Вычислена разница между фактической ({workout_distance} км) и плановой ({planned_distance} км) дистанцией: {diff_percent:.2f}%")
 
+                # Получаем форматированную информацию о дне тренировки
+                day_message = format_training_day(matched_day, day_num)
+                
                 # Формируем сообщение о сопоставлении
                 training_completion_msg = (
                     f"✅ *Тренировка успешно сопоставлена с выбранным днем!*\n\n"
-                    f"День {day_num}: {matched_day['day']} ({matched_day['date']})\n"
-                    f"Тип: {matched_day['training_type']}\n"
                     f"Плановая дистанция: {matched_day['distance']}\n"
                     f"Фактическая дистанция: {workout_distance} км\n\n"
                 )
@@ -1664,16 +1690,8 @@ async def callback_query_handler(update, context):
                 if training_day_num in completed or training_day_num in canceled:
                     continue
 
-                # Создаем сообщение с днем тренировки
-                training_type = day.get('training_type') or day.get('type', 'Не указан')
-
-                day_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {training_type}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
+                # Используем функцию форматирования тренировочного дня для согласованного вида
+                day_message = format_training_day(day, training_day_num)
 
                 # Создаем кнопки "Выполнено" и "Отменить" для каждого дня тренировки
                 keyboard = InlineKeyboardMarkup([
@@ -1813,13 +1831,7 @@ async def callback_query_handler(update, context):
             # Отправляем каждый день тренировки с соответствующими кнопками
             for idx, day in enumerate(new_plan['training_days']):
                 training_day_num = idx + 1
-                day_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {day['training_type']}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
+                day_message = format_training_day(day, training_day_num)
 
                 # Создаем кнопки для действий
                 keyboard = InlineKeyboardMarkup([
