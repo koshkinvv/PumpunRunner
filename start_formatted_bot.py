@@ -1,11 +1,14 @@
 """
 Запускает Telegram бота с обновленным форматированием отображения тренировочных планов.
-Используются форматирование из function format_training_day() для всех типов тренировок.
+Это упрощенная версия скрипта запуска, которая использует библиотеку python-telegram-bot.
 """
-import asyncio
 import logging
 import os
-from bot_modified import setup_bot
+import sys
+from telegram.ext import Application
+
+# Добавляем текущую директорию в путь поиска модулей, если запускаем из другого каталога
+sys.path.append('.')
 
 # Настройка логирования
 logging.basicConfig(
@@ -20,33 +23,27 @@ logging.basicConfig(
 # Создаем директорию для логов, если её нет
 os.makedirs("logs", exist_ok=True)
 
-async def main():
+def main():
     """Точка входа для запуска бота."""
+    from bot_modified import setup_bot
+    
+    # Получаем токен из переменных окружения
+    token = os.environ.get("TELEGRAM_TOKEN")
+    if not token:
+        logging.error("TELEGRAM_TOKEN не найден в переменных окружения")
+        sys.exit(1)
+    
     # Настраиваем и запускаем бота
     app = setup_bot()
     
     # Запуск бота
-    await app.initialize()
-    await app.start()
+    app.run_polling()
     
-    logging.info("Бот запущен и готов к работе! Нажмите Ctrl+C для остановки.")
-    
-    # Запускаем бота в режиме long polling и ждем остановки
-    try:
-        # Используем встроенную функцию idle() от python-telegram-bot
-        await app.updater.start_polling()
-        
-        # Ждем бесконечно, пока не будет прерывания
-        from telegram.ext import ApplicationBuilder
-        await ApplicationBuilder.idle()
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await app.stop()
+    logging.info("Бот остановлен")
         
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         logging.info("Бот остановлен вручную.")
     except Exception as e:

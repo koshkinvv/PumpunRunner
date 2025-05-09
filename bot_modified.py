@@ -684,17 +684,8 @@ async def callback_query_handler(update, context):
             for idx, day in enumerate(training_days):
                 training_day_num = idx + 1
 
-                # Создаем сообщение с днем тренировки
-                # Определяем поле с типом тренировки (может быть 'type' или 'training_type')
-                training_type = day.get('training_type') or day.get('type', 'Не указан')
-
-                training_message = (
-                    f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                    f"Тип: {training_type}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
+                # Используем форматирование тренировочного дня для согласованного вида
+                training_message = format_training_day(day, training_day_num)
 
                 # Добавляем кнопки
                 keyboard = InlineKeyboardMarkup([
@@ -817,14 +808,10 @@ async def callback_query_handler(update, context):
 
                 day = plan['plan_data']['training_days'][day_idx]
 
-                # Обновляем сообщение с отметкой о выполнении
-                day_message = (
-                    f"✅ *День {day_number}: {day['day']} ({day['date']})* - ВЫПОЛНЕНО\n"
-                    f"Тип: {day['training_type']}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
+                # Используем функцию форматирования для согласованного вида
+                day_message = format_training_day(day, day_number)
+                # Добавляем отметку о выполнении
+                day_message = "✅ " + day_message.strip() + " - ВЫПОЛНЕНО"
 
                 try:
                     # Пытаемся обновить сообщение, если это возможно
@@ -902,14 +889,10 @@ async def callback_query_handler(update, context):
 
                 day = plan['plan_data']['training_days'][day_idx]
 
-                # Обновляем сообщение с отметкой об отмене
-                day_message = (
-                    f"❌ *День {day_number}: {day['day']} ({day['date']})* - ОТМЕНЕНО\n"
-                    f"Тип: {day['training_type']}\n"
-                    f"Дистанция: {day['distance']}\n"
-                    f"Темп: {day['pace']}\n\n"
-                    f"{day['description']}"
-                )
+                # Используем функцию форматирования для согласованного вида
+                day_message = format_training_day(day, day_number)
+                # Добавляем отметку об отмене
+                day_message = "❌ " + day_message.strip() + " - ОТМЕНЕНО"
 
                 try:
                     # Пытаемся обновить сообщение, если это возможно
@@ -1007,33 +990,20 @@ async def callback_query_handler(update, context):
                 day_completed = training_day_num in completed_days
                 day_canceled = training_day_num in canceled_days
 
+                # Используем функцию форматирования для согласованного вида
+                day_message = format_training_day(day, training_day_num)
+                
                 # Формируем сообщение в зависимости от статуса
                 if day_completed:
-                    day_message = (
-                        f"✅ *День {training_day_num}: {day['day']} ({day['date']})* - ВЫПОЛНЕНО\n"
-                        f"Тип: {day['training_type']}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    # Добавляем отметку о выполнении
+                    day_message = "✅ " + day_message.strip() + " - ВЫПОЛНЕНО"
                     await query.message.reply_text(day_message, parse_mode='Markdown')
                 elif day_canceled:
-                    day_message = (
-                        f"❌ *День {training_day_num}: {day['day']} ({day['date']})* - ОТМЕНЕНО\n"
-                        f"Тип: {day['training_type']}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    # Добавляем отметку об отмене
+                    day_message = "❌ " + day_message.strip() + " - ОТМЕНЕНО"
                     await query.message.reply_text(day_message, parse_mode='Markdown')
                 else:
-                    day_message = (
-                        f"*День {training_day_num}: {day['day']} ({day['date']})*\n"
-                        f"Тип: {day['training_type']}\n"
-                        f"Дистанция: {day['distance']}\n"
-                        f"Темп: {day['pace']}\n\n"
-                        f"{day['description']}"
-                    )
+                    # Дни без статуса остаются как есть
 
                     # Добавляем кнопки для действий
                     keyboard = InlineKeyboardMarkup([
