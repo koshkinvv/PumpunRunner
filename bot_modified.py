@@ -74,21 +74,6 @@ def format_weekly_volume(volume, default_value="0"):
 
 
 # Все старые определения удалены, функция переопределена выше
-        
-        # Базовые данные, которые должны быть в любом случае
-        try:
-            # Основные данные о дне тренировки
-            day_date = day.get('date', 'Дата не указана')
-            day_name = day.get('day', day.get('day_of_week', f'День {training_day_num}'))
-            
-            # Поддержка разных полей для типа тренировки
-            training_type = None
-            for field in ['training_type', 'type', 'workout_type']:
-                if field in day:
-                    training_type = day[field]
-                    break
-            if not training_type:
-                training_type = 'Тип не указан'
             
             # Расширенные данные тренировки
             distance = day.get('distance', 'Дистанция не указана')
