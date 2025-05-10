@@ -74,46 +74,6 @@ def format_weekly_volume(volume, default_value="0"):
 
 
 # Все старые определения удалены, функция переопределена выше
-            
-            # Расширенные данные тренировки
-            distance = day.get('distance', 'Дистанция не указана')
-            pace = day.get('pace', 'Темп не указан')
-            
-            # Пульсовые зоны
-            heart_rate = day.get('heart_rate', '')
-            heart_rate_text = f"\nПульс: {heart_rate}" if heart_rate else ""
-            
-            # Описание тренировки и цель
-            description = day.get('description', '')
-            purpose = day.get('purpose', '')
-            
-            # Дополнительные поля для улучшенного отображения
-            warmup = day.get('warmup', '')
-            main_part = day.get('main_part', '')
-            cooldown = day.get('cooldown', '')
-            
-            # Рекомендации
-            nutrition = day.get('nutrition', '')
-            recovery = day.get('recovery', '')
-            notes = day.get('notes', '')
-        except Exception as e:
-            logging.exception(f"Ошибка при извлечении базовых данных из дня тренировки: {e}")
-            # Если не удалось извлечь даже базовые данные, возвращаем упрощенное сообщение
-            return (
-                f"*День {training_day_num}*\n"
-                f"Тип: Легкая пробежка\n"
-                f"Дистанция: 5 км\n"
-                f"Темп: 6:00-6:30 мин/км\n\n"
-                f"Легкая восстановительная пробежка в комфортном темпе."
-            )
-        
-        # Создадим новый улучшенный формат для любого плана
-        try:
-            structured_description = ""
-            
-            # Проверяем, есть ли уже структурированное описание
-            if description and ("Разминка:" in description or "Основная часть:" in description or "Заминка:" in description):
-                # План уже имеет структурированное описание, используем его
                 description_parts = []
                 
                 # Извлекаем разминку
