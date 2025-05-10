@@ -3,7 +3,6 @@
 
 """
 Скрипт для запуска бота с улучшенным форматированием тренировок.
-Подключает модуль improved_training_format.py для красивого вывода тренировок.
 """
 
 import asyncio
@@ -17,24 +16,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Импортируем конфигурацию и модули бота
 from config import TELEGRAM_TOKEN
 
-# Импортируем улучшенную функцию форматирования
-from improved_training_format import format_training_day as improved_format
-
-# Переопределяем функцию форматирования в модуле bot.py
-import bot
-bot.format_training_day = improved_format
+# Импортируем улучшенный модуль бота
+import enhanced_bot as bot
 
 async def main():
     """Основная функция для запуска бота."""
     try:
         logger.info("Запуск бота с улучшенным форматированием тренировок")
         
-        # Настраиваем и запускаем бота
+        # Настраиваем бота
         application = bot.setup_bot()
-        await application.run_polling(allowed_updates=["message", "callback_query"])
+        
+        # Запускаем бота
+        await application.run_polling()
         
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
