@@ -1,0 +1,1 @@
+entrypoint = "python run_fixed_bot_directly.py"
