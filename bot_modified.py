@@ -467,6 +467,16 @@ async def generate_plan_command(update, context):
         # Get OpenAI service and generate plan
         openai_service = OpenAIService()
         plan = openai_service.generate_training_plan(profile)
+        
+        # Проверяем структуру данных плана и преобразуем при необходимости
+        if 'plan_data' not in plan and 'training_days' in plan:
+            # Преобразуем старую структуру в новую для совместимости
+            logging.info("Преобразование формата плана для обеспечения совместимости")
+            plan['plan_data'] = {
+                'training_days': plan['training_days']
+            }
+            # Удаляем старое поле чтобы избежать дублирования
+            del plan['training_days']
 
         # Save the plan to database
         plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -659,7 +669,7 @@ async def callback_query_handler(update, context):
         return
 
     # Обработка кнопок подтверждения создания нового плана
-    if query.data == "confirm_new_plan" or query.data == "new_plan":
+    if query.data == "confirm_new_plan":
         # Получаем ID пользователя
         telegram_id = update.effective_user.id
         db_user_id = DBManager.get_user_id(telegram_id)
@@ -729,6 +739,16 @@ async def callback_query_handler(update, context):
 
             # Генерируем план
             plan = openai_service.generate_training_plan(profile)
+
+            # Проверяем структуру данных плана и преобразуем при необходимости
+            if 'plan_data' not in plan and 'training_days' in plan:
+                # Преобразуем старую структуру в новую для совместимости
+                logging.info("Преобразование формата плана для обеспечения совместимости")
+                plan['plan_data'] = {
+                    'training_days': plan['training_days']
+                }
+                # Удаляем старое поле чтобы избежать дублирования
+                del plan['training_days']
 
             # Сохраняем план в БД
             plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -1211,6 +1231,17 @@ async def callback_query_handler(update, context):
                 logging.info(f"Начинаем генерацию плана для пользователя {telegram_id} с профилем: {profile}")
                 try:
                     plan = openai_service.generate_training_plan(profile)
+                    
+                    # Проверяем структуру данных плана и преобразуем при необходимости
+                    if 'plan_data' not in plan and 'training_days' in plan:
+                        # Преобразуем старую структуру в новую для совместимости
+                        logging.info("Преобразование формата плана для обеспечения совместимости")
+                        plan['plan_data'] = {
+                            'training_days': plan['training_days']
+                        }
+                        # Удаляем старое поле чтобы избежать дублирования
+                        del plan['training_days']
+                    
                     logging.info(f"План успешно сгенерирован для пользователя {telegram_id}: {plan}")
                 except Exception as openai_error:
                     logging.error(f"Ошибка при генерации плана через OpenAI для пользователя {telegram_id}: {openai_error}")
@@ -1346,6 +1377,16 @@ async def callback_query_handler(update, context):
                 # Получаем сервис OpenAI и генерируем план
                 openai_service = OpenAIService()
                 plan = openai_service.generate_training_plan(profile)
+
+                # Проверяем структуру данных плана и преобразуем при необходимости
+                if 'plan_data' not in plan and 'training_days' in plan:
+                    # Преобразуем старую структуру в новую для совместимости
+                    logging.info("Преобразование формата плана для обеспечения совместимости")
+                    plan['plan_data'] = {
+                        'training_days': plan['training_days']
+                    }
+                    # Удаляем старое поле чтобы избежать дублирования
+                    del plan['training_days']
 
                 # Сохраняем план в базу данных
                 plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -1859,6 +1900,16 @@ async def callback_query_handler(update, context):
                 new_plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
                 logging.info(f"Получен новый план: {new_plan.get('plan_name', 'Неизвестный план')}")
 
+                # Проверяем структуру данных плана
+                if 'plan_data' not in new_plan and 'training_days' in new_plan:
+                    # Преобразуем старую структуру в новую для совместимости
+                    logging.info("Преобразование формата плана для обеспечения совместимости")
+                    new_plan['plan_data'] = {
+                        'training_days': new_plan['training_days']
+                    }
+                    # Удаляем старое поле чтобы избежать дублирования
+                    del new_plan['training_days']
+                
                 # Сохраняем новый план в базу данных
                 logging.info(f"Сохранение нового плана в БД для пользователя {db_user_id}")
                 new_plan_id = TrainingPlanManager.save_training_plan(db_user_id, new_plan)
@@ -1886,7 +1937,19 @@ async def callback_query_handler(update, context):
             await send_main_menu(update, context, "Что еще вы хотите сделать?")
 
             # Отправляем каждый день тренировки с соответствующими кнопками
-            for idx, day in enumerate(new_plan['training_days']):
+            # Проверяем структуру данных плана тренировок
+            if 'plan_data' in new_plan and 'training_days' in new_plan['plan_data']:
+                # Новый формат - структура с plan_data
+                training_days = new_plan['plan_data']['training_days']
+            elif 'training_days' in new_plan:
+                # Старый формат - training_days напрямую в корне объекта
+                training_days = new_plan['training_days']
+            else:
+                # Если структура неизвестна, логируем и используем пустой список
+                logging.error(f"Неизвестная структура данных плана: {new_plan.keys()}")
+                training_days = []
+                
+            for idx, day in enumerate(training_days):
                 training_day_num = idx + 1
                 day_message = format_training_day(day, training_day_num)
 
@@ -2567,6 +2630,16 @@ def setup_bot():
 
                 # Генерируем план
                 plan = openai_service.generate_training_plan(profile)
+
+                # Проверяем структуру данных плана и преобразуем при необходимости
+                if 'plan_data' not in plan and 'training_days' in plan:
+                    # Преобразуем старую структуру в новую для совместимости
+                    logging.info("Преобразование формата плана для обеспечения совместимости")
+                    plan['plan_data'] = {
+                        'training_days': plan['training_days']
+                    }
+                    # Удаляем старое поле чтобы избежать дублирования
+                    del plan['training_days']
 
                 # Сохраняем план в БД
                 plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
