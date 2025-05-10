@@ -57,8 +57,8 @@ def format_weekly_volume(volume, default_value="0"):
 
 def format_training_day(day, training_day_num):
     """
-    Форматирует день тренировки для отображения в более подробном виде.
-    Поддерживает как старый, так и новый формат данных тренировки.
+    Форматирует день тренировки в стиле зеленого текста на черном фоне,
+    как показано на скриншоте. Адаптирует любой формат в улучшенную структуру.
     
     Args:
         day: Словарь с данными о дне тренировки
@@ -74,126 +74,228 @@ def format_training_day(day, training_day_num):
     distance = day.get('distance', 'Дистанция не указана')
     pace = day.get('pace', 'Темп не указан')
     
-    # Дополнительные данные, которые могут быть в расширенном формате
-    heart_rate = day.get('heart_rate', '')
-    heart_rate_text = f"\nПульс: {heart_rate}" if heart_rate else ""
+    # Извлекаем километраж из строки дистанции (например, "8 км" -> "8")
+    # или из целочисленного значения
+    km_value = ""
+    if isinstance(distance, str):
+        import re
+        km_match = re.search(r'(\d+(?:\.\d+)?)', distance)
+        if km_match:
+            km_value = km_match.group(1)
+    elif isinstance(distance, (int, float)):
+        km_value = str(distance)
     
+    km_text = f" ({km_value} км)" if km_value else ""
+    
+    # Получаем описание и цель тренировки
     description = day.get('description', '')
     purpose = day.get('purpose', '')
     
-    # Создадим новый улучшенный формат для любого плана
-    structured_description = ""
+    # Извлекаем информацию о разминке, основной части и заминке
+    warmup_details = []
+    main_workout_details = []
+    cooldown_details = []
     
-    # Проверяем, есть ли уже структурированное описание
-    if "Разминка:" in description or "Основная часть:" in description or "Заминка:" in description:
-        # План уже имеет структурированное описание, используем его
-        description_parts = []
-        
-        # Извлекаем разминку
+    # Определяем тип разминки и заминки на основе типа тренировки
+    warmup_distance = "2 км"
+    cooldown_distance = "1 км"
+    
+    if "интервал" in training_type.lower():
+        warmup_distance = "2 км"
+        cooldown_distance = "1 км"
+    elif "темпов" in training_type.lower():
+        warmup_distance = "2 км"
+        cooldown_distance = "2 км"
+    elif "длительн" in training_type.lower():
+        warmup_distance = "1.5 км"
+        cooldown_distance = "1 км"
+    elif "восстанов" in training_type.lower():
+        warmup_distance = "0.5 км"
+        cooldown_distance = "0.5 км"
+    
+    # Анализируем описание для получения деталей
+    if "Разминка:" in description or "разминка:" in description:
+        # План уже имеет структурированное описание, извлекаем его
         if "Разминка:" in description:
-            warmup = description.split("Разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("Разминка:")[1].strip()
-            description_parts.append(f"Разминка: {warmup}")
-        
-        # Извлекаем основную часть
-        if "Основная часть:" in description:
-            main_part = description.split("Основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("Основная часть:")[1].strip()
-            description_parts.append(f"Основная часть: {main_part}")
-        
-        # Извлекаем заминку
-        if "Заминка:" in description:
-            cooldown = description.split("Заминка:")[1].strip()
-            description_parts.append(f"Заминка: {cooldown}")
-        
-        structured_description = "\n\n".join(description_parts)
-    else:
-        # Это простое описание, преобразуем его в структурированное на основе некоторых ключевых слов
-        # и эвристики о том, как обычно строятся тренировки
-        
-        # Ищем признаки разминки в описании
-        warmup_indicators = ["разминка", "разогрев", "начните с", "начало тренировки"]
-        main_indicators = ["основная часть", "затем", "главная нагрузка", "после разминки"]
-        cooldown_indicators = ["заминка", "остывание", "закончите", "в конце", "завершите"]
-        
-        # Разбиваем описание на предложения
-        sentences = [s.strip() for s in description.replace('. ', '.|').replace('! ', '!|').replace('? ', '?|').split('|') if s.strip()]
-        
-        # Категоризируем предложения
-        warmup_sentences = []
-        main_sentences = []
-        cooldown_sentences = []
-        uncategorized = []
-        
-        # Простой алгоритм категоризации
-        for sentence in sentences:
-            sentence_lower = sentence.lower()
-            
-            if any(indicator in sentence_lower for indicator in warmup_indicators):
-                warmup_sentences.append(sentence)
-            elif any(indicator in sentence_lower for indicator in cooldown_indicators):
-                cooldown_sentences.append(sentence)
-            elif any(indicator in sentence_lower for indicator in main_indicators) or "интервал" in sentence_lower or "темп" in sentence_lower:
-                main_sentences.append(sentence)
-            else:
-                # Если не можем определить категорию, добавим в некатегоризованные
-                uncategorized.append(sentence)
-        
-        # Если не нашли категоризованные предложения, используем эвристику:
-        # Если есть хотя бы 3 предложения, первое - разминка, последнее - заминка,
-        # все между - основная часть
-        if not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) >= 3:
-            warmup_sentences = [sentences[0]]
-            cooldown_sentences = [sentences[-1]]
-            main_sentences = sentences[1:-1]
-            uncategorized = []
-        # Если 2 предложения - первое разминка, второе основная часть
-        elif not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) == 2:
-            warmup_sentences = [sentences[0]]
-            main_sentences = [sentences[1]]
-            cooldown_sentences = []
-            uncategorized = []
-        # Если только 1 предложение - всё основная часть
-        elif not (warmup_sentences or main_sentences or cooldown_sentences) and len(sentences) == 1:
-            main_sentences = sentences
-            warmup_sentences = []
-            cooldown_sentences = []
-            uncategorized = []
-        
-        # Некатегоризованные предложения добавляем в основную часть
-        main_sentences.extend(uncategorized)
-        
-        # Составляем структурированное описание
-        description_parts = []
-        
-        if warmup_sentences:
-            description_parts.append(f"Разминка: {' '.join(warmup_sentences)}")
-        
-        if main_sentences:
-            description_parts.append(f"Основная часть: {' '.join(main_sentences)}")
-        
-        if cooldown_sentences:
-            description_parts.append(f"Заминка: {' '.join(cooldown_sentences)}")
-        
-        structured_description = "\n\n".join(description_parts)
-    
-    # Добавляем цель тренировки, если она указана
-    if purpose:
-        if structured_description:
-            structured_description += f"\n\nЦель: {purpose}"
+            warmup_text = description.split("Разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("Разминка:")[1].strip()
         else:
-            structured_description = f"Цель: {purpose}"
+            warmup_text = description.split("разминка:")[1].split("Основная часть:")[0].strip() if "Основная часть:" in description else description.split("разминка:")[1].strip()
+        
+        # Разделяем на пункты, если они есть
+        warmup_details = [item.strip() for item in warmup_text.split('.') if item.strip()]
+    else:
+        # Создаем стандартные пункты разминки
+        warmup_details = [
+            f"10-15 минут легкого бега (темп 5:30-6:00 мин/км)",
+            "3-4 динамических упражнения (высокие колени, захлесты голени)",
+            f"2-3 ускорения по 30 секунд (темп около 4:30 мин/км)"
+        ]
     
-    # Если структурированного описания нет, используем исходное описание
-    if not structured_description:
-        structured_description = description
+    # Извлекаем основную часть
+    if "Основная часть:" in description or "основная часть:" in description:
+        if "Основная часть:" in description:
+            main_text = description.split("Основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("Основная часть:")[1].strip()
+        else:
+            main_text = description.split("основная часть:")[1].split("Заминка:")[0].strip() if "Заминка:" in description else description.split("основная часть:")[1].strip()
+        
+        # Разделяем на пункты, если они есть
+        main_workout_details = [item.strip() for item in main_text.split('.') if item.strip()]
+    else:
+        # Определяем содержание основной части на основе типа тренировки
+        if "интервал" in training_type.lower():
+            main_workout_details = [
+                f"6 интервалов по 800м в темпе 4:10-4:20 мин/км",
+                f"Отдых между интервалами: медленный бег 400м (5:45-6:00 мин/км)",
+                f"Важно: поддерживайте ровное усилие на всех интервалах"
+            ]
+        elif "темпов" in training_type.lower():
+            main_workout_details = [
+                f"{int(km_value) - 4 if km_value else 6} км непрерывного бега в марафонском темпе: 4:40-4:50 мин/км",
+                f"Фокус: поддержание стабильного темпа без ускорений и замедлений",
+                f"Пульс должен оставаться в зоне 80-85% от максимума"
+            ]
+        elif "длительн" in training_type.lower():
+            main_workout_details = [
+                f"Бег в комфортном темпе на всей дистанции",
+                f"Фокус: аэробная выносливость и экономичность бега",
+                f"Следите за техникой и равномерным дыханием"
+            ]
+        else:
+            main_workout_details = [
+                f"Равномерный бег в комфортном темпе",
+                f"Контролируйте дыхание и следите за техникой"
+            ]
     
-    # Формируем итоговое сообщение
-    formatted_message = (
-        f"*День {training_day_num}: {day_name} ({day_date})*\n"
-        f"Тип: {training_type}\n"
-        f"Дистанция: {distance}\n"
-        f"Темп: {pace}{heart_rate_text}\n\n"
-        f"{structured_description}"
-    )
+    # Извлекаем заминку
+    if "Заминка:" in description or "заминка:" in description:
+        if "Заминка:" in description:
+            cooldown_text = description.split("Заминка:")[1].strip()
+        else:
+            cooldown_text = description.split("заминка:")[1].strip()
+        
+        # Разделяем на пункты, если они есть
+        cooldown_details = [item.strip() for item in cooldown_text.split('.') if item.strip()]
+    else:
+        # Создаем стандартные пункты заминки
+        cooldown_details = [
+            f"5-10 минут очень легкого бега (темп 6:00+ мин/км)",
+            f"Короткая растяжка основных мышечных групп"
+        ]
+    
+    # Создаем цель тренировки, если она указана
+    if not purpose:
+        # Определяем цель на основе типа тренировки
+        if "интервал" in training_type.lower():
+            purpose = "развитие лактатного порога, улучшение скоростной выносливости"
+        elif "темпов" in training_type.lower():
+            purpose = "развитие выносливости на уровне марафонского темпа"
+        elif "длительн" in training_type.lower():
+            purpose = "развитие аэробной выносливости и экономичности бега"
+        elif "восстанов" in training_type.lower():
+            purpose = "активное восстановление, поддержание объема"
+        else:
+            purpose = "общее развитие выносливости"
+    
+    # Создаем текст физиологической цели
+    physio_goal = ""
+    if "интервал" in training_type.lower():
+        physio_goal = ("Эта тренировка нацелена на повышение лактатного "
+                      "порога - способности организма эффективно утилизировать лактат при высокой "
+                      "интенсивности. По методике Джека Дэниелса, интервалы 800м с интенсивностью "
+                      "85-90% от максимума оптимально стимулируют улучшение аэробной мощности и "
+                      "лактатного порога.")
+    elif "темпов" in training_type.lower():
+        physio_goal = ("По методике Стива Магнесса, темповые пробежки на "
+                      "уровне марафонского темпа тренируют мышечную эффективность и "
+                      "метаболическую адаптацию именно к тому темпу, который потребуется "
+                      "поддерживать на соревновании. Это улучшает экономичность бега и "
+                      "психологическую уверенность.")
+    elif "длительн" in training_type.lower():
+        physio_goal = ("Длительные пробежки развивают митохондриальную плотность, "
+                      "капилляризацию мышц и эффективность использования жиров в качестве "
+                      "топлива. Это критически важно для марафонской дистанции, где ваше тело "
+                      "должно экономно расходовать гликоген.")
+    elif "восстанов" in training_type.lower():
+        physio_goal = ("Восстановительные пробежки усиливают кровоток в мышцах, "
+                      "удаляя продукты распада и ускоряя доставку питательных веществ. "
+                      "Такие тренировки критически важны для общего прогресса и профилактики "
+                      "перетренированности.")
+        
+    # Создаем советы по выполнению
+    execution_tips = []
+    if "интервал" in training_type.lower():
+        execution_tips = [
+            "Выполняйте на ровной поверхности (стадион идеален)",
+            "Контролируйте темп через пульс (не должен превышать 90% от максимума)",
+            "Концентрируйтесь на поддержании техники даже при нарастающей усталости",
+            "Не превышайте рекомендуемый темп в первых интервалах"
+        ]
+    elif "темпов" in training_type.lower():
+        execution_tips = [
+            "Первый километр темповой части начните на 5-10 секунд медленнее целевого темпа",
+            "Следите за ровным дыханием (желательно ритм 3 шага вдох / 3 шага выдох)",
+            "Гидратация: маленький глоток воды перед стартом темповой части"
+        ]
+    elif "длительн" in training_type.lower():
+        execution_tips = [
+            "Выберите маршрут без крутых подъемов для первой половины дистанции",
+            "Старайтесь поддерживать одинаковое усилие, а не темп, на подъемах и спусках",
+            "Гидратация и питание: вода каждые 20-30 минут, гель/бар после 1-1.5 часов"
+        ]
+    elif "восстанов" in training_type.lower():
+        execution_tips = [
+            "Темп должен быть действительно легким - вы должны комфортно разговаривать",
+            "Отслеживайте пульс - он не должен превышать 65-70% от максимума",
+            "Фокусируйтесь на технике и расслаблении плечевого пояса"
+        ]
+    
+    # Форматируем главный заголовок тренировки
+    header = f"{day_name.upper()}: {training_type.upper()}{km_text}"
+    
+    # Форматируем структурированное описание тренировки
+    formatted_description = []
+    formatted_description.append(f"Задачи: {purpose}")
+    formatted_description.append("\nСтруктура тренировки:")
+    
+    # Добавляем разминку
+    formatted_description.append(f"\n1. Разминка ({warmup_distance}):")
+    for item in warmup_details:
+        formatted_description.append(f"• {item}")
+    
+    # Вычисляем дистанцию основной части
+    main_distance = ""
+    try:
+        total_km = float(km_value) if km_value else 0
+        warmup_km = float(warmup_distance.split()[0]) if warmup_distance else 0
+        cooldown_km = float(cooldown_distance.split()[0]) if cooldown_distance else 0
+        main_km = total_km - warmup_km - cooldown_km
+        if main_km > 0:
+            main_distance = f"{main_km} км"
+    except:
+        main_distance = "?"
+    
+    # Добавляем основную часть
+    formatted_description.append(f"\n2. Основная часть ({main_distance}):")
+    for item in main_workout_details:
+        formatted_description.append(f"• {item}")
+    
+    # Добавляем заминку
+    formatted_description.append(f"\n3. Заминка ({cooldown_distance}):")
+    for item in cooldown_details:
+        formatted_description.append(f"• {item}")
+    
+    # Добавляем физиологическую цель
+    if physio_goal:
+        formatted_description.append(f"\nФизиологическая цель: {physio_goal}")
+    
+    # Добавляем советы по выполнению
+    if execution_tips:
+        formatted_description.append("\nСоветы по выполнению:")
+        for tip in execution_tips:
+            formatted_description.append(f"• {tip}")
+    
+    # Финальное сообщение с форматированием
+    formatted_message = f"*{header}*\n" + "\n".join(formatted_description)
     
     return formatted_message
 
