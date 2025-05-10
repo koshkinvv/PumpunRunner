@@ -5,11 +5,11 @@ def format_training_day(day, training_day_num):
     Улучшенная функция для форматирования дня тренировки.
     Отображает расширенную информацию, включая пульсовые зоны, детальное описание,
     рекомендации по питанию и восстановлению.
-    
+
     Args:
         day: Словарь с данными о дне тренировки
         training_day_num: Номер дня тренировки
-        
+
     Returns:
         str: Отформатированное сообщение о дне тренировки
     """
@@ -37,13 +37,13 @@ def format_training_day(day, training_day_num):
                 f"• Следите за самочувствием\n"
                 f"• Не превышайте рекомендуемый темп\n"
             )
-        
+
         # Основные данные о дне тренировки
         try:
             # Собираем основную информацию
             day_date = day.get('date', 'Дата не указана')
             day_name = day.get('day', day.get('day_of_week', f'День {training_day_num}'))
-            
+
             # Поддержка различных форматов типа тренировки
             training_type = None
             for field in ['training_type', 'type', 'workout_type']:
@@ -52,39 +52,39 @@ def format_training_day(day, training_day_num):
                     break
             if not training_type:
                 training_type = 'Тип не указан'
-            
+
             # Дистанция и темп
             distance = day.get('distance', 'Дистанция не указана')
             pace = day.get('pace', 'Темп не указан')
-            
+
             # Пульсовые зоны
             heart_rate = day.get('heart_rate', '')
-            
+
             # Детальное описание тренировки
             description = day.get('description', '')
             purpose = day.get('purpose', '')
-            
+
             # Получаем поля для структурированного описания
             workout_segments = day.get('workout_segments', {})
             warmup_segment = workout_segments.get('warmup', '')
             main_segment = workout_segments.get('main', '')
             cooldown_segment = workout_segments.get('cooldown', '')
-            
+
             # Дополнительные поля
             nutrition = day.get('nutrition', '')
             recovery = day.get('recovery', '')
             notes = day.get('notes', '')
-            
+
             # Также поддерживаем прямые поля
             direct_warmup = day.get('warmup', '')
             direct_main = day.get('main_part', '')
             direct_cooldown = day.get('cooldown', '')
-            
+
             # Используем данные из структуры или прямых полей
             warmup = warmup_segment or direct_warmup
             main_part = main_segment or direct_main
             cooldown = cooldown_segment or direct_cooldown
-            
+
             # Определяем цель тренировки из описания, если не указана явно
             if not purpose and description:
                 if "цель" in description.lower():
@@ -93,7 +93,7 @@ def format_training_day(day, training_day_num):
                         purpose = purpose_part.split(".")[0].strip("- :")
                     else:
                         purpose = purpose_part.strip("- :")
-            
+
         except Exception as e:
             logging.exception(f"Ошибка при извлечении базовых данных: {e}")
             return (
@@ -111,7 +111,7 @@ def format_training_day(day, training_day_num):
                 f"• Короткая растяжка основных мышечных групп\n\n"
                 f"Физиологическая цель: Эта тренировка направлена на активное восстановление и поддержание базовой выносливости без создания дополнительного стресса для организма."
             )
-        
+
         # Формируем структурированное описание тренировки
         try:
             # Получаем информацию о размере каждой части тренировки
@@ -124,23 +124,23 @@ def format_training_day(day, training_day_num):
                     distance_value = float(distance)
             except (ValueError, TypeError):
                 distance_value = None
-                
+
             warmup_distance = "1 км" if distance_value and distance_value > 3 else "0.5 км"
             main_distance = f"{distance_value - 2 if distance_value and distance_value > 3 else distance_value - 1 if distance_value else ''} км"
             cooldown_distance = "1 км" if distance_value and distance_value > 3 else "0.5 км"
-            
+
             # Базовая структура тренировки
             if not purpose and "цель" in description.lower():
                 purpose_match = description.lower().split("цель")[1].split(".")[0] if "." in description.lower().split("цель")[1] else description.lower().split("цель")[1]
                 purpose = purpose_match.strip("- :")
-            
+
             # Стандартная структура для заголовка тренировки
             title = f"*{day_name.upper()}: {training_type.upper()} ({distance})*"
             tasks = f"Задачи: {purpose.lower() if purpose else 'развитие выносливости'}"
-            
+
             # Структура и сегменты тренировки
             structure_header = "Структура тренировки:"
-            
+
             # Разминка
             warmup_details = []
             if warmup:
@@ -150,10 +150,10 @@ def format_training_day(day, training_day_num):
                 warmup_details.append("5-6 динамических упражнений (высокие колени, захлесты голени, выпады)")
                 if "интервал" in training_type.lower() or "интервальная" in training_type.lower():
                     warmup_details.append("2-3 ускорения по 30 секунд (темп около 4:30 мин/км)")
-            
+
             warmup_section = f"1. Разминка ({warmup_distance}):\n"
             warmup_section += "\n".join([f"• {item}" for item in warmup_details])
-            
+
             # Основная часть
             main_details = []
             if main_part:
@@ -172,10 +172,10 @@ def format_training_day(day, training_day_num):
                 else:
                     main_details.append(f"Бег в комфортном темпе {pace}")
                     main_details.append("Контролируйте дыхание и технику")
-            
+
             main_section = f"2. Основная часть ({main_distance}):\n"
             main_section += "\n".join([f"• {item}" for item in main_details])
-            
+
             # Заминка
             cooldown_details = []
             if cooldown:
@@ -183,10 +183,10 @@ def format_training_day(day, training_day_num):
             else:
                 cooldown_details.append(f"5-10 минут очень легкого бега (темп {float(pace.split('-')[0].replace(':', '.')) + 0.3 if '-' in pace and ':' in pace else '6:30+'} мин/км)")
                 cooldown_details.append("Короткая растяжка основных мышечных групп")
-            
+
             cooldown_section = f"3. Заминка ({cooldown_distance}):\n"
             cooldown_section += "\n".join([f"• {item}" for item in cooldown_details])
-            
+
             # Физиологическая цель
             physio_goal = "Физиологическая цель: "
             if "интервал" in training_type.lower():
@@ -199,11 +199,11 @@ def format_training_day(day, training_day_num):
                 physio_goal += "Эта тренировка направлена на активное восстановление и поддержание базовой выносливости без создания дополнительного стресса для организма."
             else:
                 physio_goal += "Эта тренировка направлена на развитие аэробной выносливости и эффективности бега при низкой и средней интенсивности."
-            
+
             # Советы по выполнению
             tips_header = "Советы по выполнению:"
             tips = []
-            
+
             if "интервал" in training_type.lower():
                 tips.append("Выполняйте на ровной поверхности (стадион идеален)")
                 tips.append("Контролируйте темп через пульс (не должен превышать 90% от максимума)")
@@ -223,9 +223,9 @@ def format_training_day(day, training_day_num):
                 tips.append("Бегите в максимально комфортном темпе")
                 tips.append("Следите за самочувствием")
                 tips.append("Не превышайте рекомендуемый темп")
-            
+
             tips_section = tips_header + "\n" + "\n".join([f"• {tip}" for tip in tips])
-            
+
             # Собираем все в одно сообщение
             sections = [
                 title,
@@ -241,25 +241,25 @@ def format_training_day(day, training_day_num):
                 "",
                 physio_goal
             ]
-            
+
             if nutrition:
                 sections.append("")
                 sections.append(f"Питание: {nutrition}")
-            
+
             if recovery:
                 sections.append("")
                 sections.append(f"Восстановление: {recovery}")
-            
+
             if heart_rate:
                 sections.append("")
                 sections.append(f"Пульсовые зоны: {heart_rate}")
-            
+
             # Добавляем советы в конце
             sections.append("")
             sections.append(tips_section)
-            
+
             return "\n".join(sections)
-            
+
         except Exception as e:
             logging.exception(f"Ошибка при создании структурированного описания: {e}")
             return (
