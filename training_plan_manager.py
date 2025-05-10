@@ -97,6 +97,45 @@ class TrainingPlanManager:
         """
         conn = None
         try:
+            # Проверяем структуру плана тренировок и нормализуем её при необходимости
+            if not isinstance(plan_data, dict):
+                logging.error(f"Ошибка: план тренировок не является словарем: {type(plan_data)}")
+                return None
+                
+            # Проверяем, что у нас есть необходимые поля
+            if "plan_name" not in plan_data:
+                logging.warning("Отсутствует поле plan_name, добавляем значение по умолчанию")
+                plan_data["plan_name"] = "Беговой план"
+                
+            if "plan_description" not in plan_data:
+                logging.warning("Отсутствует поле plan_description, добавляем значение по умолчанию")
+                plan_data["plan_description"] = "Персонализированный план тренировок"
+                
+            # Нормализуем структуру тренировочного плана
+            if "training_days" in plan_data and "plan_data" not in plan_data:
+                logging.info("Нормализация структуры плана: перемещение training_days внутрь plan_data")
+                plan_data["plan_data"] = {
+                    "training_days": plan_data["training_days"]
+                }
+                # Удаляем теперь ненужное поле, чтобы избежать дублирования
+                del plan_data["training_days"]
+            
+            # Если нет ни training_days, ни plan_data, это неверный формат
+            if "plan_data" not in plan_data:
+                logging.error(f"Ошибка: в плане тренировок отсутствует обязательное поле plan_data")
+                return None
+                
+            # Убедимся, что plan_data - это словарь
+            if not isinstance(plan_data["plan_data"], dict):
+                logging.error(f"Ошибка: plan_data не является словарем: {type(plan_data['plan_data'])}")
+                return None
+                
+            # Убедимся, что training_days существует внутри plan_data
+            if "training_days" not in plan_data["plan_data"]:
+                logging.error(f"Ошибка: в плане тренировок отсутствует обязательное поле training_days внутри plan_data")
+                return None
+                
+            # Создаем соединение с базой данных
             conn = TrainingPlanManager.get_connection()
             with conn.cursor() as cursor:
                 # Insert training plan
