@@ -16,7 +16,22 @@ from conversation import RunnerProfileConversation
 from image_analyzer import ImageAnalyzer
 
 # Импортируем улучшенную функцию форматирования тренировок
-from improved_training_format import format_training_day
+from improved_training_format import format_training_day as improved_format_training_day
+
+# Используем улучшенную версию для форматирования тренировок
+def format_training_day(day, training_day_num):
+    """
+    Обертка для улучшенной функции форматирования тренировок.
+    Использует новую реализацию из модуля improved_training_format.
+    
+    Args:
+        day: Словарь с данными о дне тренировки
+        training_day_num: Номер дня тренировки
+        
+    Returns:
+        str: Отформатированное сообщение о дне тренировки
+    """
+    return improved_format_training_day(day, training_day_num)
 
 
 async def send_main_menu(update, context, message_text="Что вы хотите сделать?"):
@@ -58,31 +73,7 @@ def format_weekly_volume(volume, default_value="0"):
     return f"{volume} км/неделю"
 
 
-def format_training_day(day, training_day_num):
-    """
-    Форматирует день тренировки для отображения в более подробном виде.
-    Поддерживает как старый, так и новый формат данных тренировки.
-    Улучшенная версия с поддержкой всех полей, которые генерирует OpenAI.
-    
-    Args:
-        day: Словарь с данными о дне тренировки
-        training_day_num: Номер дня тренировки
-        
-    Returns:
-        str: Отформатированное сообщение о дне тренировки
-    """
-    try:
-        # Проверяем, что день является словарем
-        if not isinstance(day, dict):
-            logging.error(f"Ошибка формата дня тренировки: {type(day)}, значение: {day}")
-            # Возвращаем стандартный день тренировки
-            return (
-                f"*День {training_day_num}*\n"
-                f"Тип: Легкая пробежка\n"
-                f"Дистанция: 5 км\n"
-                f"Темп: 6:00-6:30 мин/км\n\n"
-                f"Легкая восстановительная пробежка в комфортном темпе."
-            )
+# Все старые определения удалены, функция переопределена выше
         
         # Базовые данные, которые должны быть в любом случае
         try:
