@@ -1021,6 +1021,7 @@ class RunnerProfileConversation:
             summary += f"⏱️ Целевое время: {profile['target_time']}\n"
             
         summary += (
+            f"💪 Уровень физической подготовки: {profile['fitness_level']}\n"
             f"🏃‍♂️ Комфортный пэйс: {profile['comfortable_pace']}\n"
             f"📊 Еженедельный объем: {profile['weekly_volume_text']} км\n"
             f"🗓️ Количество тренировок в неделю: {profile['training_days_per_week']}\n"
@@ -1217,6 +1218,7 @@ class RunnerProfileConversation:
                 STATES['WEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weight)],
                 STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
+                STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['COMFORTABLE_PACE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_comfortable_pace)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],
@@ -1249,6 +1251,7 @@ class RunnerProfileConversation:
                 STATES['WEIGHT']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weight)],
                 STATES['GOAL']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_goal)],
                 STATES['TARGET_TIME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_target_time)],
+                STATES['FITNESS']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_fitness)],
                 STATES['COMFORTABLE_PACE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_comfortable_pace)],
                 STATES['WEEKLY_VOLUME']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_weekly_volume)],
                 STATES['TRAINING_START_DATE']: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.collect_training_start_date)],

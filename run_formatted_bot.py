@@ -37,8 +37,7 @@ async def main():
         await app.updater.start_polling()
         
         # Ждем бесконечно, пока не будет прерывания
-        from telegram.ext import ApplicationBuilder
-        await ApplicationBuilder.idle()
+        await app.updater.idle()
     except asyncio.CancelledError:
         pass
     finally:
