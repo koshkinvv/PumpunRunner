@@ -34,10 +34,15 @@ def main():
             goal_distance="10 км",
             goal_date="2025-07-20",
             available_days=["Вторник", "Четверг", "Суббота"],
+            target_time="50:00",
+            comfortable_pace="6:15",
             recent_runs=[
-                RecentRun(date="2025-05-01", distance=5.0, pace="6:30"),
-                RecentRun(date="2025-05-08", distance=6.0, pace="6:25")
-            ]
+                RecentRun(date="2025-05-01", distance=5.0, pace="6:30", notes="Легкая пробежка"),
+                RecentRun(date="2025-05-08", distance=6.0, pace="6:25", notes="Темповая тренировка")
+            ],
+            # Для тестов не передаем информацию о корректировке плана и текущем плане
+            adjustment_info=None, 
+            current_plan=None
         )
         
         print(f"📋 Генерация плана для бегуна:")

@@ -249,8 +249,9 @@ def format_training_day(day, training_day_num):
             "Фокусируйтесь на технике и расслаблении плечевого пояса"
         ]
     
-    # Форматируем главный заголовок тренировки
-    header = f"{day_name.upper()}: {training_type.upper()}{km_text}"
+    # Форматируем главный заголовок тренировки с датой
+    date_str = f" ({day_date})" if day_date and day_date != 'Дата не указана' else ""
+    header = f"{day_name.upper()}{date_str}: {training_type.upper()}{km_text}"
     
     # Форматируем структурированное описание тренировки
     formatted_description = []
@@ -566,9 +567,18 @@ async def generate_plan_command(update, context):
         # Generate new training plan
         await update.message.reply_text("⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...")
 
-        # Get OpenAI service and generate plan
-        openai_service = OpenAIService()
-        plan = openai_service.generate_training_plan(profile)
+        try:
+            # Пробуем использовать новый MCP-инструмент через адаптер
+            from agent.adapter import AgentAdapter
+            agent_adapter = AgentAdapter()
+            plan = agent_adapter.generate_training_plan(profile)
+            logging.info("План успешно создан через MCP-инструмент")
+        except Exception as e:
+            logging.error(f"Ошибка при использовании MCP-инструмента: {e}")
+            # В случае ошибки возвращаемся к старому методу
+            openai_service = OpenAIService()
+            plan = openai_service.generate_training_plan(profile)
+            logging.info("План создан через оригинальный OpenAIService после ошибки MCP")
 
         # Save the plan to database
         plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -826,11 +836,19 @@ async def callback_query_handler(update, context):
 
         # Генерируем новый план
         try:
-            # Инициализируем сервис OpenAI
-            openai_service = OpenAIService()
-
             # Генерируем план
-            plan = openai_service.generate_training_plan(profile)
+            try:
+                # Пробуем использовать новый MCP-инструмент через адаптер
+                from agent.adapter import AgentAdapter
+                agent_adapter = AgentAdapter()
+                plan = agent_adapter.generate_training_plan(profile)
+                logging.info("План успешно создан через MCP-инструмент")
+            except Exception as e:
+                logging.error(f"Ошибка при использовании MCP-инструмента: {e}")
+                # В случае ошибки возвращаемся к старому методу
+                openai_service = OpenAIService()
+                plan = openai_service.generate_training_plan(profile)
+                logging.info("План создан через оригинальный OpenAIService после ошибки MCP")
 
             # Сохраняем план в БД
             plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -1306,14 +1324,21 @@ async def callback_query_handler(update, context):
                         caption="⏳ Генерирую новый персонализированный план тренировок с учетом вашего обновленного профиля. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
                     )
 
-                # Получаем сервис OpenAI и генерируем полностью новый план по обновленному профилю
-                logging.info(f"Создаем экземпляр OpenAI сервиса для пользователя {telegram_id}")
-                openai_service = OpenAIService()
-
+                # Генерируем новый план по обновленному профилю
                 logging.info(f"Начинаем генерацию плана для пользователя {telegram_id} с профилем: {profile}")
                 try:
-                    plan = openai_service.generate_training_plan(profile)
-                    logging.info(f"План успешно сгенерирован для пользователя {telegram_id}: {plan}")
+                    try:
+                        # Пробуем использовать новый MCP-инструмент через адаптер
+                        from agent.adapter import AgentAdapter
+                        agent_adapter = AgentAdapter()
+                        plan = agent_adapter.generate_training_plan(profile)
+                        logging.info(f"План для пользователя {telegram_id} успешно создан через MCP-инструмент")
+                    except Exception as mcp_error:
+                        logging.error(f"Ошибка при использовании MCP-инструмента для пользователя {telegram_id}: {mcp_error}")
+                        # В случае ошибки возвращаемся к старому методу
+                        openai_service = OpenAIService()
+                        plan = openai_service.generate_training_plan(profile)
+                        logging.info(f"План для пользователя {telegram_id} создан через оригинальный OpenAIService после ошибки MCP")
                 except Exception as openai_error:
                     logging.error(f"Ошибка при генерации плана через OpenAI для пользователя {telegram_id}: {openai_error}")
                     await query.message.reply_text(
@@ -1445,9 +1470,19 @@ async def callback_query_handler(update, context):
                         caption="⏳ Генерирую персонализированный план тренировок. Это может занять некоторое время...\n\nМой котик всегда готов к любой задаче! 🐱💪"
                     )
 
-                # Получаем сервис OpenAI и генерируем план
-                openai_service = OpenAIService()
-                plan = openai_service.generate_training_plan(profile)
+                # Генерируем план
+                try:
+                    # Пробуем использовать новый MCP-инструмент через адаптер
+                    from agent.adapter import AgentAdapter
+                    agent_adapter = AgentAdapter()
+                    plan = agent_adapter.generate_training_plan(profile)
+                    logging.info(f"План успешно создан через MCP-инструмент")
+                except Exception as e:
+                    logging.error(f"Ошибка при использовании MCP-инструмента: {e}")
+                    # В случае ошибки возвращаемся к старому методу
+                    openai_service = OpenAIService()
+                    plan = openai_service.generate_training_plan(profile)
+                    logging.info("План создан через оригинальный OpenAIService после ошибки MCP")
 
                 # Сохраняем план в базу данных
                 plan_id = TrainingPlanManager.save_training_plan(db_user_id, plan)
@@ -1804,15 +1839,34 @@ async def callback_query_handler(update, context):
                 "Это может занять некоторое время."
             )
 
-            # Создаем инстанс OpenAI сервиса и корректируем план
-            openai_service = OpenAIService()
-            adjusted_plan = openai_service.adjust_training_plan(
-                runner_profile,
-                current_plan['plan_data'],
-                day_num,
-                planned_distance,
-                actual_distance
-            )
+            # Сначала пробуем использовать MCP-адаптер для корректировки плана
+            try:
+                logging.info("Инициализация AgentAdapter для корректировки плана")
+                from agent.adapter import AgentAdapter
+                agent_adapter = AgentAdapter()
+                
+                logging.info(f"Вызов agent_adapter для корректировки плана: день={day_num}, план/факт={planned_distance}/{actual_distance}")
+                # Теперь у нас есть реализация метода корректировки в AgentAdapter
+                adjusted_plan = agent_adapter.adjust_training_plan(
+                    runner_profile,
+                    current_plan['plan_data'],
+                    day_num,
+                    planned_distance,
+                    actual_distance
+                )
+                logging.info("План успешно скорректирован через MCP-инструмент")
+            except Exception as adapter_error:
+                # Если произошла ошибка, используем стандартный OpenAIService
+                logging.error(f"Ошибка при использовании AgentAdapter для корректировки: {adapter_error}")
+                openai_service = OpenAIService()
+                adjusted_plan = openai_service.adjust_training_plan(
+                    runner_profile,
+                    current_plan['plan_data'],
+                    day_num,
+                    planned_distance,
+                    actual_distance
+                )
+                logging.info("План скорректирован через OpenAIService после ошибки адаптера")
 
             if not adjusted_plan:
                 await query.message.reply_text("❌ Не удалось скорректировать план. Пожалуйста, попробуйте позже.")
@@ -1954,12 +2008,24 @@ async def callback_query_handler(update, context):
 
             # Получаем сервис OpenAI и генерируем продолжение плана
             try:
-                logging.info("Инициализация OpenAIService для продолжения плана")
-                openai_service = OpenAIService()
-
-                logging.info(f"Вызов generate_training_plan_continuation с параметрами: profile_id={profile['id']}, total_distance={total_distance}")
-                new_plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
-                logging.info(f"Получен новый план: {new_plan.get('plan_name', 'Неизвестный план')}")
+                # Сначала пробуем использовать MCP-инструмент через адаптер
+                try:
+                    logging.info("Инициализация AgentAdapter для продолжения плана")
+                    from agent.adapter import AgentAdapter
+                    agent_adapter = AgentAdapter()
+                    
+                    logging.info(f"Вызов agent_adapter.generate_training_plan_continuation с параметрами: profile_id={profile['id']}, total_distance={total_distance}")
+                    new_plan = agent_adapter.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
+                    logging.info(f"Получен новый план через MCP-инструмент: {new_plan.get('plan_name', 'Неизвестный план')}")
+                except Exception as adapter_error:
+                    # Если произошла ошибка с адаптером, используем старый сервис
+                    logging.error(f"Ошибка при использовании AgentAdapter: {adapter_error}")
+                    logging.info("Переключение на OpenAIService для продолжения плана")
+                    
+                    openai_service = OpenAIService()
+                    logging.info(f"Вызов openai_service.generate_training_plan_continuation с параметрами: profile_id={profile['id']}, total_distance={total_distance}")
+                    new_plan = openai_service.generate_training_plan_continuation(profile, total_distance, current_plan['plan_data'])
+                    logging.info(f"Получен новый план через OpenAIService: {new_plan.get('plan_name', 'Неизвестный план')}")
 
                 # Сохраняем новый план в базу данных
                 logging.info(f"Сохранение нового плана в БД для пользователя {db_user_id}")
