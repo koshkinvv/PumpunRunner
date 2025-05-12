@@ -1048,6 +1048,10 @@ class RunnerProfileConversation:
             user_id = context.user_data.get('db_user_id')
             profile_data = context.user_data.get('profile_data', {})
             
+            # Добавляем значение NULL для поля fitness_level, которое было удалено из процесса регистрации
+            if 'fitness_level' not in profile_data:
+                profile_data['fitness_level'] = None
+                
             # Save profile to database
             if DBManager.save_runner_profile(user_id, profile_data):
                 # Устанавливаем флаг обновления профиля для предложения создания нового плана
