@@ -1,0 +1,1 @@
+run = "cd /home/runner/workspace && python app.py"

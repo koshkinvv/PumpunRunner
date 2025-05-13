@@ -2,6 +2,9 @@ import os
 import logging
 import json
 import datetime
+import subprocess
+import time
+import psutil
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
@@ -46,6 +49,71 @@ with app.app_context():
 def index():
     """Главная страница лендинга"""
     return render_template('landing.html')
+
+@app.route('/admin')
+def admin():
+    """Административная панель управления"""
+    # Получаем статус бота
+    bot_status = {
+        'running': False,  # По умолчанию считаем, что бот не запущен
+        'last_start': None,
+        'last_error': None,
+        'log': []
+    }
+    
+    # Проверка наличия файла состояния бота
+    if os.path.exists('bot_health.txt'):
+        try:
+            with open('bot_health.txt', 'r') as f:
+                last_update = f.read().strip()
+                
+            # Проверяем, обновлялся ли файл в последние 30 секунд
+            try:
+                last_update_time = datetime.datetime.strptime(last_update, '%Y-%m-%d %H:%M:%S')
+                time_diff = datetime.datetime.now() - last_update_time
+                if time_diff.total_seconds() < 30:
+                    bot_status['running'] = True
+                    bot_status['last_start'] = last_update
+            except Exception as e:
+                logging.error(f"Ошибка при парсинге времени: {str(e)}")
+        except Exception as e:
+            logging.error(f"Ошибка при чтении файла состояния бота: {str(e)}")
+    
+    # Получаем последние логи
+    try:
+        if os.path.exists('bot_monitor.log'):
+            with open('bot_monitor.log', 'r') as f:
+                log_lines = f.readlines()[-20:]  # Последние 20 строк
+                
+            for line in log_lines:
+                parts = line.strip().split(' ', 2)
+                if len(parts) >= 3:
+                    timestamp = parts[0] + ' ' + parts[1]
+                    message = parts[2]
+                    
+                    # Определяем уровень лога
+                    level = 'INFO'
+                    if 'ERROR' in message:
+                        level = 'ERROR'
+                    elif 'WARNING' in message:
+                        level = 'WARNING'
+                    
+                    bot_status['log'].append({
+                        'timestamp': timestamp,
+                        'level': level,
+                        'message': message
+                    })
+    except Exception as e:
+        logging.error(f"Ошибка при чтении логов: {str(e)}")
+    
+    # Проверяем наличие переменных окружения
+    env_vars = {
+        'TELEGRAM_TOKEN': bool(os.environ.get('TELEGRAM_TOKEN')),
+        'DATABASE_URL': bool(os.environ.get('DATABASE_URL')),
+        'OPENAI_API_KEY': bool(os.environ.get('OPENAI_API_KEY'))
+    }
+    
+    return render_template('index.html', bot_status=bot_status, env_vars=env_vars)
 
 
 @app.route('/success')
@@ -140,6 +208,145 @@ def create_profile():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# API маршруты для управления ботом (админ-панель)
+@app.route('/api/bot/status', methods=['GET'])
+def bot_status():
+    """Возвращает текущий статус бота"""
+    status = {
+        'running': False,
+        'last_update': None
+    }
+    
+    # Проверка наличия файла состояния бота
+    if os.path.exists('bot_health.txt'):
+        try:
+            with open('bot_health.txt', 'r') as f:
+                last_update = f.read().strip()
+                
+            # Проверяем, обновлялся ли файл в последние 30 секунд
+            try:
+                last_update_time = datetime.datetime.strptime(last_update, '%Y-%m-%d %H:%M:%S')
+                time_diff = datetime.datetime.now() - last_update_time
+                if time_diff.total_seconds() < 30:
+                    status['running'] = True
+                    status['last_update'] = last_update
+            except Exception as e:
+                logging.error(f"Ошибка при парсинге времени: {str(e)}")
+        except Exception as e:
+            logging.error(f"Ошибка при чтении файла состояния бота: {str(e)}")
+    
+    return jsonify(status)
+
+
+@app.route('/api/bot/logs', methods=['GET'])
+def bot_logs():
+    """Возвращает последние логи бота"""
+    logs = []
+    
+    try:
+        if os.path.exists('bot_monitor.log'):
+            with open('bot_monitor.log', 'r') as f:
+                log_lines = f.readlines()[-50:]  # Последние 50 строк
+                
+            for line in log_lines:
+                parts = line.strip().split(' ', 2)
+                if len(parts) >= 3:
+                    timestamp = parts[0] + ' ' + parts[1]
+                    message = parts[2]
+                    
+                    # Определяем уровень лога
+                    level = 'INFO'
+                    if 'ERROR' in message:
+                        level = 'ERROR'
+                    elif 'WARNING' in message:
+                        level = 'WARNING'
+                    
+                    logs.append({
+                        'timestamp': timestamp,
+                        'level': level,
+                        'message': message
+                    })
+    except Exception as e:
+        logging.error(f"Ошибка при чтении логов: {str(e)}")
+    
+    return jsonify({'logs': logs})
+
+
+@app.route('/api/bot/start', methods=['GET'])
+def start_bot():
+    """Запускает бота"""
+    try:
+        # Используем shell скрипт для запуска бота
+        script_path = os.path.abspath('bot_workflow.sh')
+        subprocess.Popen(['bash', script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return jsonify({'success': True, 'message': 'Бот запущен'})
+    except Exception as e:
+        logging.error(f"Ошибка при запуске бота: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bot/stop', methods=['GET'])
+def stop_bot():
+    """Останавливает бота"""
+    try:
+        # Ищем и завершаем все процессы бота
+        processes = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                # Ищем процессы Python, запущенные с файлом bot
+                if proc.info['name'] == 'python' and any('bot' in arg for arg in proc.info['cmdline']):
+                    processes.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        # Завершаем найденные процессы
+        for proc in processes:
+            proc.terminate()
+        
+        # Даем процессам время на корректное завершение
+        if processes:
+            psutil.wait_procs(processes, timeout=3)
+            
+            # Принудительно завершаем оставшиеся процессы
+            for proc in processes:
+                if proc.is_running():
+                    proc.kill()
+        
+        # Удаляем файл состояния бота
+        if os.path.exists('bot_health.txt'):
+            os.remove('bot_health.txt')
+            
+        return jsonify({'success': True, 'message': 'Бот остановлен'})
+    except Exception as e:
+        logging.error(f"Ошибка при остановке бота: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/bot/restart', methods=['GET'])
+def restart_bot():
+    """Перезапускает бота"""
+    try:
+        # Сначала останавливаем бота
+        stop_response = stop_bot()
+        if isinstance(stop_response, tuple) and stop_response[1] == 500:
+            # Если остановка не удалась, возвращаем ошибку
+            return stop_response
+            
+        # Ждем немного, чтобы убедиться, что все процессы завершены
+        time.sleep(2)
+        
+        # Затем запускаем бота снова
+        start_response = start_bot()
+        if isinstance(start_response, tuple) and start_response[1] == 500:
+            # Если запуск не удался, возвращаем ошибку
+            return start_response
+            
+        return jsonify({'success': True, 'message': 'Бот перезапущен'})
+    except Exception as e:
+        logging.error(f"Ошибка при перезапуске бота: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

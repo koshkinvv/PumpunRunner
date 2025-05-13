@@ -1,1 +1,1 @@
-run = "cd /home/runner/workspace && python3 app.py"
+run = "python app.py"
