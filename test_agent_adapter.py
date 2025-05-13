@@ -95,7 +95,11 @@ def test_generate_plan():
         adapter = AgentAdapter()
         
         # Генерируем план
-        plan = adapter.generate_training_plan(EXAMPLE_PROFILE)
+        plan = adapter.generate_training_plan(
+            EXAMPLE_PROFILE, 
+            force_adjustment_mode=False, 
+            explicit_adjustment_note=None
+        )
         
         # Выводим результат
         logging.info(f"План успешно сгенерирован: {plan.get('plan_name', 'Неизвестный план')}")
@@ -126,7 +130,9 @@ def test_continue_plan():
         new_plan = adapter.generate_training_plan_continuation(
             EXAMPLE_PROFILE, 
             total_distance, 
-            EXAMPLE_PLAN["plan_data"]
+            EXAMPLE_PLAN["plan_data"],
+            force_adjustment_mode=False,
+            explicit_adjustment_note=None
         )
         
         # Выводим результат
@@ -184,7 +190,9 @@ def test_mock_recent_runs():
             comfortable_pace="5:30",
             recent_runs=recent_runs,
             adjustment_info=None,
-            current_plan=None
+            current_plan=None,
+            force_adjustment_mode=False,
+            explicit_adjustment_note=None
         )
         
         # Выводим профиль

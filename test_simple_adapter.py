@@ -40,7 +40,9 @@ def create_simple_profile():
             comfortable_pace="5:30",
             recent_runs=[],
             adjustment_info=None,
-            current_plan=None
+            current_plan=None,
+            force_adjustment_mode=False,
+            explicit_adjustment_note=None
         )
         
         logging.info(f"✅ Профиль создан: {profile.model_dump_json(indent=2)}")

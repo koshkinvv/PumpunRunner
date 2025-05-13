@@ -42,7 +42,9 @@ def main():
             ],
             # Для тестов не передаем информацию о корректировке плана и текущем плане
             adjustment_info=None, 
-            current_plan=None
+            current_plan=None,
+            force_adjustment_mode=False,
+            explicit_adjustment_note=None
         )
         
         print(f"📋 Генерация плана для бегуна:")

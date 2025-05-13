@@ -68,6 +68,9 @@ class RunnerProfile(BaseModel):
     # Новые поля для поддержки корректировки плана
     adjustment_info: Optional[AdjustmentInfo] = Field(None, description="Информация о корректировке плана")
     current_plan: Optional[CurrentPlan] = Field(None, description="Текущий план тренировок")
+    # Поля для прямого управления поведением генерации плана
+    force_adjustment_mode: Optional[bool] = Field(False, description="Принудительно использовать режим корректировки")
+    explicit_adjustment_note: Optional[str] = Field(None, description="Явное текстовое описание корректировки для промпта")
 
 
 class GeneratePlanUseCase:
@@ -221,19 +224,31 @@ class GeneratePlanUseCase:
             # Проверяем, содержит ли профиль информацию о корректировке или принудительный флаг
             adjustment_mode = False
             force_adjustment = False
+            has_explicit_note = False
             
             try:
+                # Проверяем наличие явной заметки о корректировке
+                if isinstance(profile, dict):
+                    has_explicit_note = profile.get('explicit_adjustment_note') is not None
+                else:
+                    has_explicit_note = getattr(profile, 'explicit_adjustment_note', None) is not None
+                
                 # Проверяем принудительный флаг
                 if isinstance(profile, dict):
                     force_adjustment = profile.get('force_adjustment_mode', False)
                 else:
                     force_adjustment = getattr(profile, 'force_adjustment_mode', False)
                     
+                # Любой из этих признаков означает, что нужен режим корректировки
                 if force_adjustment:
                     adjustment_mode = True
                     logging.info("Обнаружен принудительный флаг для режима корректировки плана")
                 
-                # Если принудительный флаг не установлен, проверяем информацию о корректировке
+                if has_explicit_note:
+                    adjustment_mode = True
+                    logging.info("Обнаружена явная заметка о корректировке плана")
+                
+                # Если предыдущие признаки не обнаружены, проверяем информацию о корректировке
                 if not adjustment_mode:
                     # В зависимости от типа параметра проверяем разными способами
                     if isinstance(profile, dict):
@@ -254,13 +269,23 @@ class GeneratePlanUseCase:
             temperature = 1.0 if adjustment_mode else 0.7
             timeout = 180.0  # Увеличиваем таймаут для всех запросов
             
-            # Выбираем модель: для корректировки используем более быструю модель
-            model = self.model  # По умолчанию модель из класса
-            if adjustment_mode:
-                model = "gpt-3.5-turbo"
-                logging.info("Режим корректировки активирован: используем gpt-3.5-turbo для быстрого ответа")
+            # Всегда используем gpt-4o для всех запросов (в том числе корректировки)
+            model = "gpt-4o"
+            logging.info(f"Используем модель {model} для запроса (режим корректировки: {adjustment_mode})")
             
             logging.info(f"Отправляем запрос к OpenAI API (модель: {model}, таймаут: {timeout} секунд)")
+            
+            # Добавляем полное логирование промптов
+            logging.info("SYSTEM PROMPT:")
+            logging.info("=" * 80)
+            logging.info(system_prompt[:1000] + "..." if len(system_prompt) > 1000 else system_prompt)
+            logging.info("=" * 80)
+            
+            logging.info("USER PROMPT:")
+            logging.info("=" * 80)
+            logging.info(user_prompt)
+            logging.info("=" * 80)
+            
             response = self.client.chat.completions.create(
                 model=model,
                 messages=[
@@ -305,13 +330,27 @@ class GeneratePlanUseCase:
             for date, weekday in dates_info["training_dates_with_weekdays"].items()
         ])
         
+        # Подготавливаем информацию о корректировке
+        adjustment_note = ""
+        try:
+            if isinstance(profile, dict):
+                explicit_note = profile.get('explicit_adjustment_note')
+            else:
+                explicit_note = getattr(profile, 'explicit_adjustment_note', None)
+                
+            if explicit_note:
+                adjustment_note = f"⚠️ ВАЖНО! КОРРЕКТИРОВКА ПЛАНА: {explicit_note}\n\n"
+                logging.info(f"Добавлена информация о корректировке в системный промпт")
+        except Exception as e:
+            logging.warning(f"Ошибка при подготовке информации о корректировке: {e}")
+            
         # Системный промпт, основанный на экспертных знаниях о беговых тренировках
         return (
             f"Ты опытный беговой тренер, специалист по подготовке к соревнованиям на дистанции от 5км до марафона. "
             f"Твои знания основаны на методиках ведущих тренеров и научных исследованиях в области легкой атлетики и "
             f"спортивной физиологии (Jack Daniels, Pete Pfitzinger, Matt Fitzgerald, Brad Hudson, Arthur Lydiard, Steve Magness).\n\n"
             
-            f"Твоя задача - создать персонализированный план тренировок для бегуна, используя ТОЛЬКО указанные даты "
+            f"{adjustment_note}Твоя задача - создать персонализированный план тренировок для бегуна, используя ТОЛЬКО указанные даты "
             f"в точном соответствии с предпочтениями пользователя.\n\n"
             
             f"Пользователь выбрал следующие предпочитаемые дни недели для тренировок: {preferred_days_text}.\n"
@@ -356,20 +395,49 @@ class GeneratePlanUseCase:
         Returns:
             Пользовательский промпт
         """
+        # Сначала проверяем наличие явной заметки о корректировке
+        # Если есть, добавляем ее в начало промпта для лучшей видимости
+        initial_note = ""
+        try:
+            if isinstance(profile, dict):
+                explicit_note = profile.get('explicit_adjustment_note')
+            else:
+                explicit_note = getattr(profile, 'explicit_adjustment_note', None)
+                
+            if explicit_note:
+                initial_note = f"⚠️ {explicit_note}\n\n"
+                logging.info(f"В начало промпта добавлена явная заметка о корректировке")
+        except Exception as e:
+            logging.warning(f"Ошибка при обработке явной заметки для начала промпта: {e}")
+            
         # Определяем начальную дату тренировок
         start_date = profile.get('training_start_date_text', profile.get('training_start_date', 'Сегодня'))
         
         # Проверяем, есть ли информация о корректировке плана
         is_adjustment = False
         try:
+            # Проверяем принудительный режим корректировки
+            force_adjustment = False
             if isinstance(profile, dict):
-                is_adjustment = profile.get('adjustment_info') is not None
+                force_adjustment = profile.get('force_adjustment_mode', False)
+            else:
+                force_adjustment = getattr(profile, 'force_adjustment_mode', False)
+            
+            # Проверяем наличие информации о корректировке
+            has_adjustment_info = False
+            if isinstance(profile, dict):
+                has_adjustment_info = profile.get('adjustment_info') is not None
             else:
                 adj_info = getattr(profile, 'adjustment_info', None)
-                is_adjustment = adj_info is not None
+                has_adjustment_info = adj_info is not None
+                
+            is_adjustment = force_adjustment or has_adjustment_info
             
             if is_adjustment:
-                logging.info("Применяется шаблон промпта для корректировки плана")
+                if force_adjustment:
+                    logging.info("Применяется шаблон промпта для принудительной корректировки плана")
+                else:
+                    logging.info("Применяется шаблон промпта для корректировки плана")
         except Exception as e:
             logging.warning(f"Ошибка при определении типа промпта: {e}")
         
@@ -405,14 +473,15 @@ class GeneratePlanUseCase:
                 logging.warning(f"Ошибка при получении данных о корректировке: {e}")
             
             # Более короткий промпт для быстрой корректировки плана
-            prompt = (
+            # Добавляем "⚠️" в начало для привлечения внимания
+            prompt = initial_note + (
                 f"Корректировка плана тренировок для бегуна. Профиль бегуна:\n"
                 f"- Дистанция: {profile.get('distance', 'Неизвестно')} км\n"
                 f"- Уровень: {profile.get('experience', 'intermediate')}\n"
                 f"- Еженедельный объем: {profile.get('weekly_volume', 'Неизвестно')} км\n"
                 f"- Комфортный темп: {profile.get('comfortable_pace', 'Неизвестно')}\n\n"
                 
-                f"КОРРЕКТИРОВКА ПЛАНА: В день {day_num} ({training_type}) "
+                f"⚠️ КОРРЕКТИРОВКА ПЛАНА: В день {day_num} ({training_type}) "
                 f"спортсмен пробежал {actual_distance} км вместо запланированных {planned_distance} км "
                 f"(разница примерно {difference_percent:.1f}%). "
             )
@@ -476,6 +545,21 @@ class GeneratePlanUseCase:
                 f"- Комфортный темп бега: {profile.get('comfortable_pace', 'Неизвестно')}\n"
                 f"- Еженедельный объем бега: {profile.get('weekly_volume_text', profile.get('weekly_volume', 'Неизвестно'))} км\n\n"
             )
+            
+            # Проверяем наличие явной заметки о корректировке
+            explicit_note = None
+            try:
+                if isinstance(profile, dict):
+                    explicit_note = profile.get('explicit_adjustment_note')
+                else:
+                    explicit_note = getattr(profile, 'explicit_adjustment_note', None)
+                    
+                if explicit_note:
+                    # Добавляем явную заметку о корректировке в промпт
+                    prompt += f"\n{explicit_note}\n\n"
+                    logging.info(f"Добавлена явная заметка о корректировке в промпт: {explicit_note}")
+            except Exception as e:
+                logging.warning(f"Ошибка при обработке явной заметки о корректировке: {e}")
             
             # Проверяем, есть ли информация о корректировке плана, но не требуется серьезной корректировки
             if hasattr(profile, 'adjustment_info') and profile.adjustment_info:

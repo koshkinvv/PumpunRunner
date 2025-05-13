@@ -101,12 +101,20 @@ def test_adjustment():
         # Корректируем план
         print(f"\nКорректировка плана: день {day_num}, плановая дистанция {planned_distance} км, фактическая {actual_distance} км")
         
+        # Рассчитаем разницу в процентах
+        diff_percent = abs((actual_distance - planned_distance) / planned_distance * 100)
+        
+        # Создадим явную заметку о корректировке
+        explicit_note = f"КОРРЕКТИРОВКА: Необходимо изменить план, так как спортсмен пробежал {actual_distance} км вместо запланированных {planned_distance} км (разница {diff_percent:.1f}%)."
+        
         adjusted_plan = agent_adapter.adjust_training_plan(
             EXAMPLE_PROFILE,
             EXAMPLE_PLAN["plan_data"],
             day_num,
             planned_distance,
-            actual_distance
+            actual_distance,
+            force_adjustment_mode=True,  # Принудительно включаем режим корректировки
+            explicit_adjustment_note=explicit_note  # Добавляем явную заметку
         )
         
         # Выводим результат

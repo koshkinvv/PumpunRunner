@@ -19,7 +19,10 @@ class AgentAdapter:
         # Инициализируем инструменты при первом использовании
         self._generate_plan_tool = None
         
-    def generate_training_plan_continuation(self, runner_profile: Dict[str, Any], total_distance: float, current_plan: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_training_plan_continuation(self, runner_profile: Dict[str, Any], total_distance: float, 
+                                  current_plan: Dict[str, Any], 
+                                  force_adjustment_mode: bool = False, 
+                                  explicit_adjustment_note: Optional[str] = None) -> Dict[str, Any]:
         """
         Генерирует продолжение тренировочного плана на основе уже выполненных тренировок.
         
@@ -30,6 +33,8 @@ class AgentAdapter:
             runner_profile: Профиль бегуна
             total_distance: Общая пройденная дистанция 
             current_plan: Текущий план тренировок
+            force_adjustment_mode: Принудительно использовать режим корректировки
+            explicit_adjustment_note: Явное текстовое описание корректировки для промпта
             
         Returns:
             Новый план тренировок в формате, совместимом с ботом
@@ -47,6 +52,22 @@ class AgentAdapter:
             
             # Добавляем информацию о выполненных тренировках в профиль
             mcp_profile.recent_runs = self._extract_completed_trainings(current_plan, total_distance)
+            
+            # Проверяем дополнительные параметры
+            if force_adjustment_mode:
+                # Принудительно устанавливаем флаг корректировки
+                mcp_profile_dict = mcp_profile.model_dump()
+                mcp_profile_dict['force_adjustment_mode'] = True
+                mcp_profile = RunnerProfile(**mcp_profile_dict)
+                logging.info(f"AgentAdapter: Установлен принудительный режим корректировки")
+                
+            if explicit_adjustment_note:
+                # Добавляем явную заметку о корректировке
+                mcp_profile_dict = mcp_profile.model_dump()
+                mcp_profile_dict['explicit_adjustment_note'] = explicit_adjustment_note
+                mcp_profile = RunnerProfile(**mcp_profile_dict)
+                logging.info(f"AgentAdapter: Добавлена явная заметка о корректировке для продолжения плана")
+            
             logging.info(f"AgentAdapter: Профиль с выполненными тренировками преобразован в MCP-формат")
             
             # Генерируем новый план с учетом предыдущих тренировок
@@ -131,7 +152,9 @@ class AgentAdapter:
         
         return recent_runs
     
-    def generate_training_plan(self, runner_profile: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_training_plan(self, runner_profile: Dict[str, Any], 
+                         force_adjustment_mode: bool = False, 
+                         explicit_adjustment_note: Optional[str] = None) -> Dict[str, Any]:
         """
         Генерирует план тренировок с использованием MCP-инструмента.
         
@@ -140,6 +163,8 @@ class AgentAdapter:
         
         Args:
             runner_profile: Профиль бегуна в формате, используемом ботом
+            force_adjustment_mode: Принудительно использовать режим корректировки
+            explicit_adjustment_note: Явное текстовое описание корректировки для промпта
             
         Returns:
             План тренировок в формате, совместимом с ботом
@@ -156,6 +181,21 @@ class AgentAdapter:
             mcp_profile = self._convert_to_mcp_profile(runner_profile)
             logging.info(f"AgentAdapter: Профиль преобразован в MCP-формат с целевой дистанцией {mcp_profile.goal_distance}")
             
+            # Проверяем дополнительные параметры
+            if force_adjustment_mode:
+                # Принудительно устанавливаем флаг корректировки
+                mcp_profile_dict = mcp_profile.model_dump()
+                mcp_profile_dict['force_adjustment_mode'] = True
+                mcp_profile = RunnerProfile(**mcp_profile_dict)
+                logging.info(f"AgentAdapter: Установлен принудительный режим корректировки")
+                
+            if explicit_adjustment_note:
+                # Добавляем явную заметку о корректировке
+                mcp_profile_dict = mcp_profile.model_dump()
+                mcp_profile_dict['explicit_adjustment_note'] = explicit_adjustment_note
+                mcp_profile = RunnerProfile(**mcp_profile_dict)
+                logging.info(f"AgentAdapter: Добавлена явная заметка о корректировке для нового плана")
+            
             # Генерируем план
             plan = self._generate_plan_tool(mcp_profile)
             logging.info(f"AgentAdapter: План успешно сгенерирован через MCP-инструмент")
@@ -171,7 +211,8 @@ class AgentAdapter:
             return openai_service.generate_training_plan(runner_profile)
     
     def adjust_training_plan(self, runner_profile: Dict[str, Any], current_plan: Dict[str, Any], 
-                       day_num: int, planned_distance: float, actual_distance: float) -> Dict[str, Any]:
+                       day_num: int, planned_distance: float, actual_distance: float,
+                       force_adjustment_mode: bool = False, explicit_adjustment_note: Optional[str] = None) -> Dict[str, Any]:
         """
         Корректирует тренировочный план на основе фактических результатов выполнения тренировки.
         
@@ -184,6 +225,8 @@ class AgentAdapter:
             day_num: Номер дня тренировки, который корректируется
             planned_distance: Запланированная дистанция
             actual_distance: Фактически выполненная дистанция
+            force_adjustment_mode: Принудительно использовать режим корректировки
+            explicit_adjustment_note: Явное текстовое описание корректировки для промпта
             
         Returns:
             Скорректированный план тренировок
@@ -261,11 +304,37 @@ class AgentAdapter:
                 
                 logging.info(f"Информация для корректировки: разница {difference_percent:.1f}% между планом и фактом")
                 
-                # Принудительно устанавливаем флаг корректировки, чтобы использовать более быструю модель и другой шаблон промпта
-                # Этот флаг заставляет MCP использовать gpt-3.5-turbo вместо gpt-4o для ускорения
+                # Принудительно устанавливаем флаг корректировки, если передан соответствующий параметр
+                # или по умолчанию для автоматического использования быстрой модели
                 mcp_profile_dict = mcp_profile.model_dump()
-                mcp_profile_dict['force_adjustment_mode'] = True
+                mcp_profile_dict['force_adjustment_mode'] = force_adjustment_mode or True  # По умолчанию включаем
                 mcp_profile = RunnerProfile(**mcp_profile_dict)
+                
+                # Добавляем явную информацию о корректировке
+                # Сначала проверяем, передана ли явная заметка в параметрах
+                if explicit_adjustment_note:
+                    # Используем переданную заметку
+                    mcp_profile_dict = mcp_profile.model_dump()
+                    mcp_profile_dict['explicit_adjustment_note'] = explicit_adjustment_note
+                    mcp_profile = RunnerProfile(**mcp_profile_dict)
+                    logging.info(f"Использована явная заметка о корректировке из параметров")
+                elif not hasattr(mcp_profile, 'explicit_adjustment_note'):
+                    # Создаем строковое описание корректировки для промпта
+                    adj_note = (f"ТРЕБУЕТСЯ КОРРЕКТИРОВКА ПЛАНА: В день {day_num} (тренировка {day_to_adjust.get('training_type', '')}) "
+                               f"пользователь пробежал {actual_distance} км вместо запланированных {planned_distance} км. "
+                               f"Разница составляет {difference_percent:.1f}%. "
+                               f"Пожалуйста, скорректируйте тренировки с учетом этого отклонения.")
+                    
+                    # Добавляем в словарь модели
+                    mcp_profile_dict = mcp_profile.model_dump()
+                    mcp_profile_dict['explicit_adjustment_note'] = adj_note
+                    mcp_profile = RunnerProfile(**mcp_profile_dict)
+                    logging.info(f"Создана автоматическая заметка о корректировке")
+                
+                # Дополнительное логирование для отладки
+                logging.info(f"Проверяем профиль MCP перед отправкой: "
+                            f"adjustment_info={getattr(mcp_profile, 'adjustment_info', 'Нет')}, "
+                            f"force_adjustment_mode={getattr(mcp_profile, 'force_adjustment_mode', 'Нет')}")
                 
                 # У MCP нет специального метода для корректировки, поэтому используем generate_training_plan
                 # и передаем информацию о корректировке через профиль
