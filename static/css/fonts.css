@@ -1,0 +1,19 @@
+/* Подключаем шрифт MachineType через Google Fonts или другой аналогичный шрифт */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
+
+/* Используем Roboto Mono как замену MachineType */
+@font-face {
+    font-family: 'MachineType';
+    src: local('Roboto Mono'), local('RobotoMono-Regular');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'MachineType';
+    src: local('Roboto Mono Bold'), local('RobotoMono-Bold');
+    font-weight: bold;
+    font-style: normal;
+    font-display: swap;
+}

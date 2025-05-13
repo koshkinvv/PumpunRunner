@@ -1,3 +1,4 @@
 #!/bin/bash
-cd /home/runner/workspace
-python app.py
+
+# Запускает Flask-приложение с лендингом
+python run_webapp.py

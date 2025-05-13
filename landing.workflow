@@ -1,1 +1,4 @@
-run = "cd /home/runner/workspace && python app.py"
+[v0]
+defaultRun = ["bash", "run_landing.sh"]
+
+[v0.env]

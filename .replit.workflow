@@ -1,1 +1,4 @@
-run = "python app.py"
+[v0]
+run = ["python", "run_webapp.py"]
+
+[v0.env]
