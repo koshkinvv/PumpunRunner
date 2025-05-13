@@ -2446,6 +2446,20 @@ def setup_bot():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("plan", generate_plan_command))
     application.add_handler(CommandHandler("pending", pending_trainings_command))
+    
+    # Добавляем дополнительный обработчик для команды /start
+    async def direct_start_command(update, context):
+        """
+        Прямой обработчик команды /start, который запускает создание профиля
+        независимо от ConversationHandler
+        """
+        # Получаем объект RunnerProfileConversation
+        conversation = RunnerProfileConversation()
+        # Запускаем метод start из этого класса
+        await conversation.start(update, context)
+    
+    # Регистрируем обработчик с высоким приоритетом
+    application.add_handler(CommandHandler("start", direct_start_command), group=0)
 
     # Добавляем обработчик команды отмены
     async def cancel_command(update, context):
@@ -2475,12 +2489,13 @@ def setup_bot():
     conv_handlers = conversation.get_conversation_handler()
 
     # Если get_conversation_handler вернул список обработчиков, добавляем каждый отдельно
+    # Используем группу 1, чтобы они имели более низкий приоритет, чем прямой обработчик /start
     if isinstance(conv_handlers, list):
         for handler in conv_handlers:
-            application.add_handler(handler)
+            application.add_handler(handler, group=1)
     else:
         # Если вернул один обработчик, добавляем его напрямую
-        application.add_handler(conv_handlers)
+        application.add_handler(conv_handlers, group=1)
 
     # Add photo handler for analyzing workout screenshots
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
@@ -2488,6 +2503,10 @@ def setup_bot():
     # Add text message handler for button responses
     async def text_message_handler(update, context):
         """Обработчик текстовых сообщений от пользователя."""
+        # Пропускаем обработку команд, включая /start
+        if update.message.text.startswith('/'):
+            return
+            
         text = update.message.text.strip()
         user = update.effective_user
         telegram_id = user.id
@@ -2864,9 +2883,9 @@ def setup_bot():
             await send_main_menu(update, context, "Что еще вы хотите сделать с вашим профилем?")
 
     # Регистрируем обработчик текстовых сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler), group=2)
 
-    # Add callback query handler for inline buttons
-    application.add_handler(CallbackQueryHandler(callback_query_handler))
+    # Add callback query handler for inline buttons с группой более низкого приоритета
+    application.add_handler(CallbackQueryHandler(callback_query_handler), group=2)
 
     return application

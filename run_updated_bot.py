@@ -38,7 +38,21 @@ async def main():
         await application.updater.start_polling()
 
         # Держим бота запущенным до прерывания
-        await application.updater.stop()
+        # Блокируем выполнение, чтобы бот работал непрерывно
+        print("Бот успешно запущен и работает...")
+        
+        # Ждем неопределенно долго, чтобы бот не завершился
+        try:
+            while True:
+                await asyncio.sleep(3600)  # Ждем час и проверяем снова
+                print("Бот все еще работает...")
+        except (KeyboardInterrupt, SystemExit):
+            # При получении сигнала остановки корректно завершаем работу
+            print("Получен сигнал остановки бота...")
+            
+        # Остановка и очистка в случае прерывания
+        if application.updater:
+            await application.updater.stop()
         await application.stop()
         await application.shutdown()
 
