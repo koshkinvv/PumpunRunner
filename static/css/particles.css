@@ -1,0 +1,40 @@
+/**
+ * Стили для эффекта частиц "звездного неба"
+ */
+
+.hero-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.particles-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Анимация для создания эффекта парения */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(-10px) translateX(5px);
+  }
+  50% {
+    transform: translateY(5px) translateX(-5px);
+  }
+  75% {
+    transform: translateY(10px) translateX(5px);
+  }
+}
+
+/* Делаем контент поверх частиц */
+.hero-content {
+  position: relative;
+  z-index: 2;
+}

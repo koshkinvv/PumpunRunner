@@ -1,4 +1,3 @@
-[v0]
-defaultRun = ["bash", "run_landing.sh"]
-
-[v0.env]
+run = ["bash", "run_landing.sh"]
+language = "python3"
+persistent_folder = "."
