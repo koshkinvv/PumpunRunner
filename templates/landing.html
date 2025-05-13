@@ -13,12 +13,26 @@
     <link rel="stylesheet" href="/static/css/fonts.css">
     <link rel="stylesheet" href="/static/css/landing.css">
     <style>
-        /* Прямое применение шрифта для обхода кэширования */
-        body, h1, h2, h3, h4, h5, h6, .display-4, .navbar-brand, .btn, .lead {
-            font-family: 'Share Tech Mono', 'Roboto Mono', monospace !important;
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
         }
-        h1, h2, h3, h4, h5, h6, .display-4, .navbar-brand {
-            font-weight: 700 !important;
+        body {
+            min-height: 100vh;
+            background-color: #000;
+        }
+        .hero-title {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif !important;
+            font-weight: 600 !important;
+            font-size: clamp(4rem, 15vw, 10rem) !important;
+            letter-spacing: -0.02em !important;
+        }
+        .hero-minimal {
+            height: 100vh;
+        }
+        header, .navbar {
+            display: none !important;
         }
     </style>
 </head>
@@ -58,35 +72,34 @@
         </div>
     </header>
 
-    <!-- Главный баннер -->
-    <section class="hero py-5 text-white">
+    <!-- Главный баннер в минималистичном стиле (как ACME) -->
+    <section class="hero-minimal">
+        <div class="container-fluid p-0">
+            <div class="d-flex flex-column justify-content-center align-items-center min-vh-100">
+                <h1 class="hero-title text-center">RunCoach</h1>
+                <div class="star-field">
+                    <div class="layer"></div>
+                    <div class="layer"></div>
+                    <div class="layer"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Навигация и основные действия -->
+    <section class="py-4 bg-dark">
         <div class="container">
-            <div class="row align-items-center">
-                <div class="col-lg-6">
-                    <h1 class="display-4 fw-bold mb-3">AI-тренер для твоих беговых побед</h1>
-                    <p class="lead mb-4">Персональный план тренировок для подготовки к забегам, созданный искусственным интеллектом. Достигай свои цели с профессиональным подходом.</p>
-                    <div class="d-flex gap-3">
-                        <a href="#register" class="btn btn-primary btn-lg cta-button">
+            <div class="row justify-content-center">
+                <div class="col-lg-8 text-center">
+                    <p class="lead mb-4">Персональный AI-тренер для твоих беговых побед</p>
+                    <div class="d-flex gap-3 justify-content-center">
+                        <a href="#register" class="btn btn-lg cta-button">
                             <div class="glow-effect"></div>
                             <span class="position-relative">Получить план</span>
                         </a>
                         <a href="#features" class="btn btn-outline-light btn-lg">
                             Преимущества
                         </a>
-                    </div>
-                </div>
-                <div class="col-lg-6 text-center mt-4 mt-lg-0">
-                    <div class="hero-illustration-wrapper">
-                        <img src="/static/img/orange-runner.svg" alt="Бегун" class="img-fluid">
-                        <!-- Декоративные линии беговой дорожки -->
-                        <div class="track-lines">
-                            <div class="track-line"></div>
-                            <div class="track-line"></div>
-                            <div class="track-line"></div>
-                            <div class="track-line"></div>
-                            <div class="track-line"></div>
-                            <div class="track-line"></div>
-                        </div>
                     </div>
                 </div>
             </div>
