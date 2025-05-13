@@ -50,6 +50,66 @@ def index():
     """Главная страница лендинга"""
     return render_template('landing.html')
 
+@app.route('/register')
+def register():
+    """Страница регистрации с React-компонентами"""
+    return render_template('react-register.html')
+
+@app.route('/api/save_profile', methods=['POST'])
+def save_profile():
+    """API для сохранения профиля бегуна из React-формы"""
+    try:
+        data = request.json
+        
+        # Проверяем обязательные поля
+        required_fields = ['name', 'gender', 'age', 'height', 'weight', 
+                           'experience', 'weeklyVolume', 'comfortablePace',
+                           'goalDistance', 'goalDate', 'targetTime',
+                           'trainingDaysPerWeek', 'preferredTrainingDays']
+        
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'success': False,
+                    'error': f'Отсутствует обязательное поле: {field}'
+                }), 400
+        
+        # Форматируем данные для сохранения (snake_case для базы данных)
+        profile_data = {
+            'name': data['name'],
+            'gender': data['gender'],
+            'age': int(data['age']),
+            'height': int(data['height']),
+            'weight': int(data['weight']),
+            'experience': data['experience'],
+            'weekly_volume': int(data['weeklyVolume']),
+            'comfortable_pace': data['comfortablePace'],
+            'goal_distance': data['goalDistance'],
+            'goal_date': data['goalDate'],
+            'target_time': data['targetTime'],
+            'training_days_per_week': int(data['trainingDaysPerWeek']),
+            'preferred_training_days': ','.join(data['preferredTrainingDays']) if isinstance(data['preferredTrainingDays'], list) else data['preferredTrainingDays']
+        }
+        
+        # Здесь будет логика сохранения в базу данных
+        # Временно заглушка для демонстрации
+        
+        # Генерируем параметры для бота
+        bot_params = '&'.join([f"{k}={v}" for k, v in profile_data.items()])
+        bot_link = f"https://t.me/your_bot_name?start={bot_params}"
+        
+        return jsonify({
+            'success': True,
+            'message': 'Профиль успешно сохранен',
+            'bot_link': bot_link
+        })
+    except Exception as e:
+        app.logger.error(f"Ошибка при сохранении профиля: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Ошибка при сохранении профиля: {str(e)}'
+        }), 500
+
 @app.route('/admin')
 def admin():
     """Административная панель управления"""
