@@ -15,123 +15,45 @@ h1, h2, h3, h4, h5, h6, .display-4, .navbar-brand {
   font-weight: bold;
 }
 
-/* Минималистичный hero-баннер */
-.hero-minimal {
+.hero {
   position: relative;
   overflow: hidden;
-  background-color: #000000; /* Чистый черный фон */
-  min-height: 100vh; /* Занимает весь экран */
+  background-color: #0F1115;
+  background-size: cover;
+  background-position: center;
+  padding: 80px 0;
+}
+
+.hero-illustration-wrapper {
+  position: relative;
+  height: 400px;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
 }
 
-/* Удаляем ненужные элементы в минималистичном режиме */
-.hero-minimal .navbar, .hero-minimal .header {
-  display: none;
-}
-
-.hero-title {
-  color: #ffffff;
-  font-size: clamp(4rem, 15vw, 10rem); /* Ещё больший адаптивный размер шрифта */
-  letter-spacing: -0.02em;
-  margin-bottom: 0;
+.hero-illustration-wrapper img {
+  max-height: 300px;
   position: relative;
-  z-index: 10;
-  font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-  /* Используем системные шрифты, которые более похожи на шрифт ACME на скриншоте */
+  z-index: 2;
 }
 
-/* Звездное поле - более тонкая настройка под ACME */
-.star-field {
-  position: relative;
-  width: 80%;
-  max-width: 800px;
-  height: 60px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  margin-top: -10px;
-}
-
-/* Слои звезд с разной скоростью анимации */
-.layer {
+.track-lines {
   position: absolute;
   width: 100%;
   height: 100%;
-  top: 0;
-  left: 0;
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.5) 0.5px, transparent 0.5px);
-  background-repeat: repeat;
-  transform: translateZ(0);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.layer:nth-child(1) {
-  background-size: 150px 150px;
-  opacity: 0.4;
-  animation: starsParallax 180s linear infinite;
-}
-
-.layer:nth-child(2) {
-  background-size: 100px 100px;
-  opacity: 0.25;
-  animation: starsParallax 120s linear infinite;
-}
-
-.layer:nth-child(3) {
-  background-size: 80px 80px;
-  opacity: 0.15;
-  animation: starsParallax 90s linear infinite;
-}
-
-@keyframes starsParallax {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(50%); }
-}
-
-/* Минималистичная кнопка CTA */
-.cta-button {
-  position: relative;
-  overflow: hidden;
-  background-color: transparent !important;
-  border: 2px solid #fff !important;
-  color: #fff !important;
-  font-weight: 500;
-  padding: 12px 28px;
-  letter-spacing: 1px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(4px);
-  border-radius: 0 !important; /* Прямоугольная кнопка для минималистичного стиля */
-  text-transform: uppercase; /* Все буквы заглавные */
-}
-
-.cta-button:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  border-color: #fff !important;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(255, 255, 255, 0.15);
-}
-
-.cta-button:hover, .cta-button:focus {
-  color: #fff !important;
-}
-
-.glow-effect {
-  position: absolute;
-  top: -30%;
-  left: -30%;
-  width: 160%;
-  height: 160%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-
-.cta-button:hover .glow-effect {
-  opacity: 1;
+.track-line {
+  height: 1px;
+  width: 100%;
+  margin: 5px 0;
+  background: linear-gradient(to right, transparent, rgba(255, 87, 51, 0.3) 20%, rgba(255, 87, 51, 0.5) 50%, rgba(255, 87, 51, 0.3) 80%, transparent);
 }
 
 .avatar-circle {

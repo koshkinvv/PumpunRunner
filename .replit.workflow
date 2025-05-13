@@ -1,8 +1,4 @@
-[landing]
-run = "./run_landing.sh"
-language = "python3"
+[v0]
+run = ["python", "run_webapp.py"]
 
-[react-landing]
-run = "./run_react_landing.sh"
-language = "nodejs"
-onBoot = false
+[v0.env]
