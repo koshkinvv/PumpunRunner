@@ -14,7 +14,6 @@ from training_plan_manager import TrainingPlanManager
 from openai_service import OpenAIService
 from conversation import RunnerProfileConversation
 from image_analyzer import ImageAnalyzer
-from integration import LandingIntegration
 
 
 async def send_main_menu(update, context, message_text="Что вы хотите сделать?"):

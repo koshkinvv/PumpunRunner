@@ -1,4 +1,7 @@
-[v0]
-run = ["python", "run_webapp.py"]
-
-[v0.env]
+{
+  "bot": {
+    "command": "python run_formatted_bot.py",
+    "language": "python",
+    "onBoot": false
+  }
+}
