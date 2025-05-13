@@ -1,7 +1,1 @@
-{
-  "bot": {
-    "command": "python run_formatted_bot.py",
-    "language": "python",
-    "onBoot": false
-  }
-}
+run = "cd /home/runner/workspace && python3 app.py"

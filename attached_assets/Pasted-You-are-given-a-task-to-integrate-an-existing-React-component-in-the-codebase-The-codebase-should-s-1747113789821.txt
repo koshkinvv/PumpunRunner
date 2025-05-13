@@ -1,0 +1,308 @@
+You are given a task to integrate an existing React component in the codebase
+
+The codebase should support:
+- shadcn project structure  
+- Tailwind CSS
+- Typescript
+
+If it doesn't, provide instructions on how to setup project via shadcn CLI, install Tailwind or Typescript.
+
+Determine the default path for components and styles. 
+If default path for components is not /components/ui, provide instructions on why it's important to create this folder
+Copy-paste this component to /components/ui folder:
+```tsx
+glow-effect.tsx
+'use client';
+import { cn } from '@/lib/utils';
+import { motion, Transition } from 'motion/react';
+
+export type GlowEffectProps = {
+  className?: string;
+  style?: React.CSSProperties;
+  colors?: string[];
+  mode?:
+    | 'rotate'
+    | 'pulse'
+    | 'breathe'
+    | 'colorShift'
+    | 'flowHorizontal'
+    | 'static';
+  blur?:
+    | number
+    | 'softest'
+    | 'soft'
+    | 'medium'
+    | 'strong'
+    | 'stronger'
+    | 'strongest'
+    | 'none';
+  transition?: Transition;
+  scale?: number;
+  duration?: number;
+};
+
+export function GlowEffect({
+  className,
+  style,
+  colors = ['#FF5733', '#33FF57', '#3357FF', '#F1C40F'],
+  mode = 'rotate',
+  blur = 'medium',
+  transition,
+  scale = 1,
+  duration = 5,
+}: GlowEffectProps) {
+  const BASE_TRANSITION = {
+    repeat: Infinity,
+    duration: duration,
+    ease: 'linear',
+  };
+
+  const animations = {
+    rotate: {
+      background: [
+        `conic-gradient(from 0deg at 50% 50%, ${colors.join(', ')})`,
+        `conic-gradient(from 360deg at 50% 50%, ${colors.join(', ')})`,
+      ],
+      transition: {
+        ...(transition ?? BASE_TRANSITION),
+      },
+    },
+    pulse: {
+      background: colors.map(
+        (color) =>
+          `radial-gradient(circle at 50% 50%, ${color} 0%, transparent 100%)`
+      ),
+      scale: [1 * scale, 1.1 * scale, 1 * scale],
+      opacity: [0.5, 0.8, 0.5],
+      transition: {
+        ...(transition ?? {
+          ...BASE_TRANSITION,
+          repeatType: 'mirror',
+        }),
+      },
+    },
+    breathe: {
+      background: [
+        ...colors.map(
+          (color) =>
+            `radial-gradient(circle at 50% 50%, ${color} 0%, transparent 100%)`
+        ),
+      ],
+      scale: [1 * scale, 1.05 * scale, 1 * scale],
+      transition: {
+        ...(transition ?? {
+          ...BASE_TRANSITION,
+          repeatType: 'mirror',
+        }),
+      },
+    },
+    colorShift: {
+      background: colors.map((color, index) => {
+        const nextColor = colors[(index + 1) % colors.length];
+        return `conic-gradient(from 0deg at 50% 50%, ${color} 0%, ${nextColor} 50%, ${color} 100%)`;
+      }),
+      transition: {
+        ...(transition ?? {
+          ...BASE_TRANSITION,
+          repeatType: 'mirror',
+        }),
+      },
+    },
+    flowHorizontal: {
+      background: colors.map((color) => {
+        const nextColor = colors[(colors.indexOf(color) + 1) % colors.length];
+        return `linear-gradient(to right, ${color}, ${nextColor})`;
+      }),
+      transition: {
+        ...(transition ?? {
+          ...BASE_TRANSITION,
+          repeatType: 'mirror',
+        }),
+      },
+    },
+    static: {
+      background: `linear-gradient(to right, ${colors.join(', ')})`,
+    },
+  };
+
+  const getBlurClass = (blur: GlowEffectProps['blur']) => {
+    if (typeof blur === 'number') {
+      return `blur-[${blur}px]`;
+    }
+
+    const presets = {
+      softest: 'blur-sm',
+      soft: 'blur',
+      medium: 'blur-md',
+      strong: 'blur-lg',
+      stronger: 'blur-xl',
+      strongest: 'blur-xl',
+      none: 'blur-none',
+    };
+
+    return presets[blur as keyof typeof presets];
+  };
+
+  return (
+    <motion.div
+      style={
+        {
+          ...style,
+          '--scale': scale,
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
+        } as React.CSSProperties
+      }
+      animate={animations[mode]}
+      className={cn(
+        'pointer-events-none absolute inset-0 h-full w-full',
+        'scale-[var(--scale)] transform-gpu',
+        getBlurClass(blur),
+        className
+      )}
+    />
+  );
+}
+
+
+demo.tsx
+'use client';
+import { motion } from 'motion/react';
+import { TextMorph } from '@/components/ui/text-morph';
+import { GlowEffect } from '@/components/ui/glow-effect';
+import { useState } from 'react';
+
+export function GlowEffectCardMode() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  const handleLoad = () => {
+    if (isVisible) {
+      setIsVisible(false);
+      return;
+    }
+
+    setIsVisible(true);
+  };
+
+  return (
+    <div className='relative h-[200px] w-[300px]'>
+      <motion.div
+        className='pointer-events-none absolute inset-0'
+        animate={{
+          opacity: isVisible ? 1 : 0,
+        }}
+        transition={{
+          duration: 0.2,
+          ease: 'easeOut',
+        }}
+      >
+        <GlowEffect
+          colors={['#0894FF', '#C959DD', '#FF2E54', '#FF9004']}
+          mode='colorShift'
+          blur='medium'
+          duration={4}
+        />
+      </motion.div>
+      <div className='relative flex h-full flex-col items-end justify-end rounded-md border border-zinc-300/40 bg-zinc-100 px-4 py-3 dark:border-zinc-700/40 dark:bg-zinc-900'>
+        <button
+          className='relative ml-1 flex h-8 scale-100 select-none appearance-none items-center justify-center overflow-hidden rounded-lg border border-zinc-950/10 bg-white px-2 text-sm text-zinc-950 focus-visible:ring-2 active:scale-[0.96] dark:border-zinc-50/10'
+          type='button'
+          aria-label='Load'
+          onClick={handleLoad}
+        >
+          <TextMorph>{isVisible ? 'Submitting...' : 'Submit'}</TextMorph>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+```
+
+Copy-paste these files for dependencies:
+```tsx
+ibelick/text-morph
+'use client';
+import { cn } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useMemo, useId } from 'react';
+
+type TextMorphProps = {
+  children: string;
+  as?: React.ElementType;
+  className?: string;
+  style?: React.CSSProperties;
+};
+
+export function TextMorph({
+  children,
+  as: Component = 'p',
+  className,
+  style,
+}: TextMorphProps) {
+  const uniqueId = useId();
+
+  const characters = useMemo(() => {
+    const charCounts: Record<string, number> = {};
+
+    return children.split('').map((char, index) => {
+      const lowerChar = char.toLowerCase();
+      charCounts[lowerChar] = (charCounts[lowerChar] || 0) + 1;
+
+      return {
+        id: `${uniqueId}-${lowerChar}${charCounts[lowerChar]}`,
+        label: index === 0 ? char.toUpperCase() : lowerChar,
+      };
+    });
+  }, [children, uniqueId]);
+
+  return (
+    <Component className={cn(className)} aria-label={children} style={style}>
+      <AnimatePresence mode='popLayout' initial={false}>
+        {characters.map((character) => (
+          <motion.span
+            key={character.id}
+            layoutId={character.id}
+            className='inline-block'
+            aria-hidden='true'
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{
+              type: 'spring',
+              stiffness: 280,
+              damping: 18,
+              mass: 0.3,
+            }}
+          >
+            {character.label}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </Component>
+  );
+}
+
+```
+
+Install NPM dependencies:
+```bash
+motion, framer-motion
+```
+
+Implementation Guidelines
+ 1. Analyze the component structure and identify all required dependencies
+ 2. Review the component's argumens and state
+ 3. Identify any required context providers or hooks and install them
+ 4. Questions to Ask
+ - What data/props will be passed to this component?
+ - Are there any specific state management requirements?
+ - Are there any required assets (images, icons, etc.)?
+ - What is the expected responsive behavior?
+ - What is the best place to use this component in the app?
+
+Steps to integrate
+ 0. Copy paste all the code above in the correct directories
+ 1. Install external dependencies
+ 2. Fill image assets with Unsplash stock images you know exist
+ 3. Use lucide-react icons for svgs or logos if component requires them

@@ -198,6 +198,287 @@ class DBManager:
         finally:
             if conn:
                 conn.close()
+                
+    @staticmethod
+    def check_user_exists_by_telegram(telegram_username):
+        """
+        Check if a user exists by Telegram username.
+        
+        Args:
+            telegram_username: User's Telegram username (without @)
+            
+        Returns:
+            True if user exists, False otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM users WHERE username = %s",
+                    (telegram_username,)
+                )
+                user = cursor.fetchone()
+                return bool(user)
+                
+        except Exception as e:
+            logging.error(f"Error checking user by Telegram username: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def create_user_with_profile(profile_data):
+        """
+        Create a new user and runner profile from landing page data.
+        
+        Args:
+            profile_data: Dictionary containing user and profile information
+            
+        Returns:
+            User ID if successful, None otherwise
+        """
+        conn = None
+        try:
+            # Extract telegram username from profile_data
+            telegram_username = profile_data.get('telegram_username')
+            if not telegram_username:
+                logging.error("Telegram username is required")
+                return None
+                
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                # Check if user already exists
+                cursor.execute(
+                    "SELECT id FROM users WHERE username = %s",
+                    (telegram_username,)
+                )
+                user = cursor.fetchone()
+                
+                if user:
+                    # User already exists
+                    logging.warning(f"User with username {telegram_username} already exists")
+                    return None
+                    
+                # Insert new user
+                cursor.execute(
+                    """
+                    INSERT INTO users (username, created_at, updated_at)
+                    VALUES (%s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    RETURNING id
+                    """,
+                    (telegram_username,)
+                )
+                
+                user_id = cursor.fetchone()[0]
+                
+                # Map landing page form fields to runner_profiles table fields
+                profile_mapping = {
+                    'goal_distance': 'distance',
+                    'goal_date': 'competition_date',
+                    'gender': 'gender',
+                    'age': 'age',
+                    'height': 'height',
+                    'weight': 'weight',
+                    'level': 'fitness_level',
+                    'target_time': 'target_time',
+                    'comfortable_pace': 'comfortable_pace',
+                    'weekly_distance': 'weekly_volume',
+                    'training_start_date': 'training_start_date',
+                    'training_days_per_week': 'training_days_per_week'
+                }
+                
+                # Prepare profile data for database
+                db_profile = {}
+                for form_field, db_field in profile_mapping.items():
+                    if form_field in profile_data:
+                        db_profile[db_field] = profile_data.get(form_field)
+                
+                # Set default values for missing fields
+                db_profile.setdefault('experience', '0-1 года')  # Default experience
+                db_profile.setdefault('goal', 'Финишировать')  # Default goal
+                
+                # Handle preferred training days
+                if 'preferred_days' in profile_data:
+                    preferred_days = profile_data['preferred_days']
+                    if isinstance(preferred_days, list):
+                        db_profile['preferred_training_days'] = ','.join(preferred_days)
+                    else:
+                        db_profile['preferred_training_days'] = str(preferred_days)
+                
+                # Insert new profile
+                fields = ', '.join(['user_id'] + list(db_profile.keys()))
+                placeholders = ', '.join(['%s'] + ['%s'] * len(db_profile))
+                
+                query = f"""
+                INSERT INTO runner_profiles (
+                    {fields}, created_at, updated_at
+                ) VALUES (
+                    {placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+                
+                # Build parameters for query
+                params = [user_id] + list(db_profile.values())
+                
+                cursor.execute(query, params)
+                conn.commit()
+                
+                logging.info(f"Created new user and profile for {telegram_username}")
+                return user_id
+                
+        except Exception as e:
+            logging.error(f"Error creating user with profile: {e}")
+            if conn:
+                conn.rollback()
+            return None
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def check_profile_exists_by_username(username):
+        """
+        Check if a profile exists for a given Telegram username.
+        
+        Args:
+            username: User's Telegram username (without @)
+            
+        Returns:
+            True if profile exists, False otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                # Сначала находим ID пользователя
+                cursor.execute(
+                    "SELECT id FROM users WHERE username = %s",
+                    (username,)
+                )
+                user = cursor.fetchone()
+                
+                if not user:
+                    return False
+                    
+                user_id = user[0]
+                
+                # Затем проверяем наличие профиля для этого пользователя
+                cursor.execute(
+                    "SELECT id FROM runner_profiles WHERE user_id = %s",
+                    (user_id,)
+                )
+                profile = cursor.fetchone()
+                
+                return bool(profile)
+                
+        except Exception as e:
+            logging.error(f"Error checking profile existence by username: {e}")
+            return False
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def link_profile_to_telegram_id(username, telegram_id):
+        """
+        Link a profile created via landing page to a Telegram ID.
+        
+        Args:
+            username: User's Telegram username (without @)
+            telegram_id: User's Telegram ID
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor() as cursor:
+                # Обновляем ID Telegram в записи пользователя
+                cursor.execute(
+                    """
+                    UPDATE users 
+                    SET telegram_id = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE username = %s
+                    RETURNING id
+                    """,
+                    (telegram_id, username)
+                )
+                
+                result = cursor.fetchone()
+                if not result:
+                    logging.warning(f"No user found with username {username}")
+                    return False
+                
+                conn.commit()
+                logging.info(f"Successfully linked profile for {username} to Telegram ID {telegram_id}")
+                return True
+                
+        except Exception as e:
+            logging.error(f"Error linking profile to Telegram ID: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if conn:
+                conn.close()
+                
+    @staticmethod
+    def get_profile_by_username(username):
+        """
+        Get runner profile by Telegram username.
+        
+        Args:
+            username: User's Telegram username (without @)
+            
+        Returns:
+            Dictionary containing profile data if found, None otherwise
+        """
+        conn = None
+        try:
+            conn = DBManager.get_connection()
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+                # Получаем ID пользователя
+                cursor.execute(
+                    "SELECT id FROM users WHERE username = %s",
+                    (username,)
+                )
+                user = cursor.fetchone()
+                
+                if not user:
+                    logging.warning(f"No user found with username {username}")
+                    return None
+                
+                user_id = user[0]
+                
+                # Получаем профиль пользователя
+                cursor.execute(
+                    """
+                    SELECT * FROM runner_profiles 
+                    WHERE user_id = %s 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                    """,
+                    (user_id,)
+                )
+                
+                profile = cursor.fetchone()
+                if not profile:
+                    logging.warning(f"No profile found for user {username}")
+                    return None
+                
+                # Преобразуем в словарь
+                profile_dict = dict(profile)
+                return profile_dict
+                
+        except Exception as e:
+            logging.error(f"Error getting profile by username: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
     
     @staticmethod
     def get_runner_profile(user_id):

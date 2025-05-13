@@ -1,0 +1,173 @@
+/* Основные стили для лендинга */
+:root {
+  --primary-color: #FF5733;
+  --dark-gray: #212529;
+  --light-gray: #f8f9fa;
+}
+
+body {
+  font-family: 'Roboto', 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('/static/img/hero-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  padding: 100px 0;
+}
+
+.avatar-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.step-number {
+  width: 50px;
+  height: 50px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0 auto;
+}
+
+.step-card {
+  border-radius: 10px;
+  background-color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s;
+}
+
+.step-card:hover {
+  transform: translateY(-5px);
+}
+
+.training-day {
+  border-left: 3px solid var(--primary-color);
+  padding-left: 15px;
+}
+
+/* Анимации для элементов "звездной границы" */
+@keyframes star-movement-bottom {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(-100%, 0%); opacity: 0; }
+}
+
+@keyframes star-movement-top {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(100%, 0%); opacity: 0; }
+}
+
+.star-border {
+  position: relative;
+  display: inline-block;
+  padding: 1px;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.star-border-top,
+.star-border-bottom {
+  position: absolute;
+  width: 300%;
+  height: 50%;
+  border-radius: 100%;
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.star-border-bottom {
+  bottom: -11px;
+  right: -250%;
+  background: radial-gradient(circle, var(--primary-color), transparent 10%);
+  animation: star-movement-bottom 6s linear infinite alternate;
+}
+
+.star-border-top {
+  top: -10px;
+  left: -250%;
+  background: radial-gradient(circle, var(--primary-color), transparent 10%);
+  animation: star-movement-top 6s linear infinite alternate;
+}
+
+.star-border-content {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  text-align: center;
+  padding: 1rem 1.5rem;
+  border-radius: 20px;
+  background: linear-gradient(to bottom, rgba(33, 37, 41, 0.9), rgba(52, 58, 64, 0.9));
+}
+
+/* Стили для формы */
+.form-container {
+  max-width: 700px;
+  margin: 0 auto;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+}
+
+.form-step {
+  display: none;
+}
+
+.form-step.active {
+  display: block;
+}
+
+.form-navigation {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* Анимация для подсветки элементов */
+.glow-effect {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  filter: blur(15px);
+  background: linear-gradient(45deg, #FF5733, #FFC300, #33FF57, #33C7FF);
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.cta-button:hover .glow-effect {
+  opacity: 0.5;
+}
+
+.cta-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.pricing-card {
+  border-radius: 10px;
+  overflow: hidden;
+  transition: transform 0.3s;
+}
+
+.pricing-card:hover {
+  transform: translateY(-10px);
+}
